@@ -68,6 +68,10 @@ typedef	u_long			greg_t;
 #define	NCPU		MAXCPU
 #endif /* __FreeBSD__ */
 
+#ifndef _KERNEL
+#include <machine/frame.h>
+#endif
+
 struct dtrace_probe;
 struct dtrace_ecb;
 struct dtrace_predicate;
@@ -1126,16 +1130,19 @@ typedef struct dtrace_cred {
  * dtrace_state structure.
  */
 struct dtrace_state {
-#ifdef illumos
-	dev_t dts_dev;				/* device */
-#else
-	struct cdev *dts_dev;			/* device */
-#endif
 	int dts_necbs;				/* total number of ECBs */
 	dtrace_ecb_t **dts_ecbs;		/* array of ECBs */
 	dtrace_epid_t dts_epid;			/* next EPID to allocate */
 	size_t dts_needed;			/* greatest needed space */
+#if 0
+	/*
+	 * XXX: Do we want anonymous state when talking about DTrace which
+	 * is a library? This might make sense when compiled into the kernel
+	 * in the sense of libdtrace-kfreebsd or something, but not when
+	 * running in userspace, so it's ifdef'd out for now.
+	 */
 	struct dtrace_state *dts_anon;		/* anon. state, if grabbed */
+#endif
 	dtrace_activity_t dts_activity;		/* current activity */
 	dtrace_vstate_t dts_vstate;		/* variable state */
 	dtrace_buffer_t *dts_buffer;		/* principal buffer */
@@ -1156,13 +1163,6 @@ struct dtrace_state {
 	uint32_t dts_dblerrors;			/* errors in ERROR probes */
 	uint32_t dts_reserve;			/* space reserved for END */
 	hrtime_t dts_laststatus;		/* time of last status */
-#ifdef illumos
-	cyclic_id_t dts_cleaner;		/* cleaning cyclic */
-	cyclic_id_t dts_deadman;		/* deadman cyclic */
-#else
-	struct callout dts_cleaner;		/* Cleaning callout. */
-	struct callout dts_deadman;		/* Deadman callout. */
-#endif
 	hrtime_t dts_alive;			/* time last alive */
 	char dts_speculates;			/* boolean: has speculations */
 	char dts_destructive;			/* boolean: has dest. actions */

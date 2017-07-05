@@ -71,7 +71,7 @@ dtrace_register(const char *name, const dtrace_pattr_t *pap, uint32_t priv,
 		return (EINVAL);
 	}
 
-	if ((pops->dtps_provide == NULL && pops->dtps_provide_module == NULL) ||
+	if ((pops->dtps_provide == NULL) ||
 	    pops->dtps_enable == NULL || pops->dtps_disable == NULL ||
 	    pops->dtps_destroy == NULL ||
 	    ((pops->dtps_resume == NULL) != (pops->dtps_suspend == NULL))) {
@@ -108,7 +108,10 @@ dtrace_register(const char *name, const dtrace_pattr_t *pap, uint32_t priv,
 	if (provider == NULL)
 		return (ENOMEM);
 
-	provider->dtpv_name = kmem_alloc(strlen(name) + 1, KM_SLEEP);
+	provider->dtpv_name = malloc(strlen(name) + 1);
+	if (provider->dtpv_name == NULL)
+		return (ENOMEM);
+
 	(void) strcpy(provider->dtpv_name, name);
 
 	provider->dtpv_attr = *pap;
@@ -120,7 +123,6 @@ dtrace_register(const char *name, const dtrace_pattr_t *pap, uint32_t priv,
 	provider->dtpv_pops = *pops;
 
 	if (pops->dtps_provide == NULL) {
-		ASSERT(pops->dtps_provide_module != NULL);
 		provider->dtpv_pops.dtps_provide =
 		    (void (*)(void *, dtrace_probedesc_t *))dtrace_nullop;
 	}
