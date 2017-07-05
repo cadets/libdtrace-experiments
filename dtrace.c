@@ -24,6 +24,9 @@
 	(act)->dta_difo->dtdo_rtype.dtdt_kind == DIF_TYPE_STRING)
 #define	DT_MASK_LO 0x00000000FFFFFFFFULL
 #define	P2ROUNDUP(x, align)		(-(-(x) & -(align)))
+#define	P2PHASEUP(x, align, phase)	((phase) - (((phase) - (x)) & -(align)))
+
+#define ASSERT3U(...) (0)
 
 dtrace_provider_t *dtrace_provider;
 static dtrace_enabling_t *dtrace_retained;
@@ -80,41 +83,6 @@ static void
 dtrace_vtime_disable(void)
 {}
 
-
-/*
- * DTrace Predicate Functions
- */
-static dtrace_predicate_t *
-dtrace_predicate_create(dtrace_difo_t *dp)
-{
-	dtrace_predicate_t *pred;
-
-	ASSERT(MUTEX_HELD(&dtrace_lock));
-	ASSERT(dp->dtdo_refcnt != 0);
-
-	pred = calloc(1, sizeof (dtrace_predicate_t));
-	pred->dtp_difo = dp;
-	pred->dtp_refcnt = 1;
-
-	if (!dtrace_difo_cacheable(dp))
-		return (pred);
-
-	if (dtrace_predcache_id == DTRACE_CACHEIDNONE) {
-		/*
-		 * This is only theoretically possible -- we have had 2^32
-		 * cacheable predicates on this machine.  We cannot allow any
-		 * more predicates to become cacheable:  as unlikely as it is,
-		 * there may be a thread caching a (now stale) predicate cache
-		 * ID. (N.B.: the temptation is being successfully resisted to
-		 * have this cmn_err() "Holy shit -- we executed this code!")
-		 */
-		return (pred);
-	}
-
-	pred->dtp_cacheid = dtrace_predcache_id++;
-
-	return (pred);
-}
 
 static void
 dtrace_predicate_hold(dtrace_predicate_t *pred)
@@ -228,6 +196,56 @@ dtrace_predicate_release(dtrace_predicate_t *pred, dtrace_vstate_t *vstate)
 		dtrace_difo_release(pred->dtp_difo, vstate);
 		free(pred);
 	}
+}
+
+/*
+ * Returns 1 if the expression in the DIF object can be cached on a per-thread
+ * basis; 0 if not.
+ */
+static int
+dtrace_difo_cacheable(dtrace_difo_t *dp)
+{
+	int i;
+
+	if (dp == NULL)
+		return (0);
+
+	for (i = 0; i < dp->dtdo_varlen; i++) {
+		dtrace_difv_t *v = &dp->dtdo_vartab[i];
+
+		if (v->dtdv_scope != DIFV_SCOPE_GLOBAL)
+			continue;
+
+		switch (v->dtdv_id) {
+		case DIF_VAR_CURTHREAD:
+		case DIF_VAR_PID:
+		case DIF_VAR_TID:
+		case DIF_VAR_EXECARGS:
+		case DIF_VAR_EXECNAME:
+		case DIF_VAR_ZONENAME:
+			break;
+
+		default:
+			return (0);
+		}
+	}
+
+	/*
+	 * This DIF object may be cacheable.  Now we need to look for any
+	 * array loading instructions, any memory loading instructions, or
+	 * any stores to thread-local variables.
+	 */
+	for (i = 0; i < dp->dtdo_len; i++) {
+		uint_t op = DIF_INSTR_OP(dp->dtdo_buf[i]);
+
+		if ((op >= DIF_OP_LDSB && op <= DIF_OP_LDX) ||
+		    (op >= DIF_OP_ULDSB && op <= DIF_OP_ULDX) ||
+		    (op >= DIF_OP_RLDSB && op <= DIF_OP_RLDX) ||
+		    op == DIF_OP_LDGA || op == DIF_OP_STTS)
+			return (0);
+	}
+
+	return (1);
 }
 
 static void
@@ -1932,6 +1950,136 @@ dtrace_ecb_destroy(dtrace_ecb_t *ecb)
 	free(ecb);
 }
 
+static void
+dtrace_ecb_enable(dtrace_ecb_t *ecb)
+{
+	dtrace_probe_t *probe = ecb->dte_probe;
+
+	ASSERT(ecb->dte_next == NULL);
+
+	if (probe == NULL) {
+		/*
+		 * This is the NULL probe -- there's nothing to do.
+		 */
+		return;
+	}
+
+	if (probe->dtpr_ecb == NULL) {
+		dtrace_provider_t *prov = probe->dtpr_provider;
+
+		/*
+		 * We're the first ECB on this probe.
+		 */
+		probe->dtpr_ecb = probe->dtpr_ecb_last = ecb;
+
+		if (ecb->dte_predicate != NULL)
+			probe->dtpr_predcache = ecb->dte_predicate->dtp_cacheid;
+
+		prov->dtpv_pops.dtps_enable(prov->dtpv_arg,
+		    probe->dtpr_id, probe->dtpr_arg);
+	} else {
+		ASSERT(probe->dtpr_ecb_last != NULL);
+		probe->dtpr_ecb_last->dte_next = ecb;
+		probe->dtpr_ecb_last = ecb;
+		probe->dtpr_predcache = 0;
+	}
+}
+
+static int
+dtrace_ecb_resize(dtrace_ecb_t *ecb)
+{
+	dtrace_action_t *act;
+	uint32_t curneeded = UINT32_MAX;
+	uint32_t aggbase = UINT32_MAX;
+
+	/*
+	 * If we record anything, we always record the dtrace_rechdr_t.  (And
+	 * we always record it first.)
+	 */
+	ecb->dte_size = sizeof (dtrace_rechdr_t);
+	ecb->dte_alignment = sizeof (dtrace_epid_t);
+
+	for (act = ecb->dte_action; act != NULL; act = act->dta_next) {
+		dtrace_recdesc_t *rec = &act->dta_rec;
+		ASSERT(rec->dtrd_size > 0 || rec->dtrd_alignment == 1);
+
+		ecb->dte_alignment = MAX(ecb->dte_alignment,
+		    rec->dtrd_alignment);
+
+		if (DTRACEACT_ISAGG(act->dta_kind)) {
+			dtrace_aggregation_t *agg = (dtrace_aggregation_t *)act;
+
+			ASSERT(rec->dtrd_size != 0);
+			ASSERT(agg->dtag_first != NULL);
+			ASSERT(act->dta_prev->dta_intuple);
+			ASSERT(aggbase != UINT32_MAX);
+			ASSERT(curneeded != UINT32_MAX);
+
+			agg->dtag_base = aggbase;
+
+			curneeded = P2ROUNDUP(curneeded, rec->dtrd_alignment);
+			rec->dtrd_offset = curneeded;
+			if (curneeded + rec->dtrd_size < curneeded)
+				return (EINVAL);
+			curneeded += rec->dtrd_size;
+			ecb->dte_needed = MAX(ecb->dte_needed, curneeded);
+
+			aggbase = UINT32_MAX;
+			curneeded = UINT32_MAX;
+		} else if (act->dta_intuple) {
+			if (curneeded == UINT32_MAX) {
+				/*
+				 * This is the first record in a tuple.  Align
+				 * curneeded to be at offset 4 in an 8-byte
+				 * aligned block.
+				 */
+				ASSERT(act->dta_prev == NULL ||
+				    !act->dta_prev->dta_intuple);
+				ASSERT3U(aggbase, ==, UINT32_MAX);
+				curneeded = P2PHASEUP(ecb->dte_size,
+				    sizeof (uint64_t), sizeof (dtrace_aggid_t));
+
+				aggbase = curneeded - sizeof (dtrace_aggid_t);
+				ASSERT(IS_P2ALIGNED(aggbase,
+				    sizeof (uint64_t)));
+			}
+			curneeded = P2ROUNDUP(curneeded, rec->dtrd_alignment);
+			rec->dtrd_offset = curneeded;
+			if (curneeded + rec->dtrd_size < curneeded)
+				return (EINVAL);
+			curneeded += rec->dtrd_size;
+		} else {
+			/* tuples must be followed by an aggregation */
+			ASSERT(act->dta_prev == NULL ||
+			    !act->dta_prev->dta_intuple);
+
+			ecb->dte_size = P2ROUNDUP(ecb->dte_size,
+			    rec->dtrd_alignment);
+			rec->dtrd_offset = ecb->dte_size;
+			if (ecb->dte_size + rec->dtrd_size < ecb->dte_size)
+				return (EINVAL);
+			ecb->dte_size += rec->dtrd_size;
+			ecb->dte_needed = MAX(ecb->dte_needed, ecb->dte_size);
+		}
+	}
+
+	if ((act = ecb->dte_action) != NULL &&
+	    !(act->dta_kind == DTRACEACT_SPECULATE && act->dta_next == NULL) &&
+	    ecb->dte_size == sizeof (dtrace_rechdr_t)) {
+		/*
+		 * If the size is still sizeof (dtrace_rechdr_t), then all
+		 * actions store no data; set the size to 0.
+		 */
+		ecb->dte_size = 0;
+	}
+
+	ecb->dte_size = P2ROUNDUP(ecb->dte_size, sizeof (dtrace_epid_t));
+	ecb->dte_needed = P2ROUNDUP(ecb->dte_needed, (sizeof (dtrace_epid_t)));
+	ecb->dte_state->dts_needed = MAX(ecb->dte_state->dts_needed,
+	    ecb->dte_needed);
+	return (0);
+}
+
 static dtrace_ecb_t *
 dtrace_ecb_create(dtrace_state_t *state, dtrace_probe_t *probe,
     dtrace_enabling_t *enab)
@@ -2017,40 +2165,6 @@ dtrace_ecb_create(dtrace_state_t *state, dtrace_probe_t *probe,
 	}
 
 	return (dtrace_ecb_create_cache = ecb);
-}
-static void
-dtrace_ecb_enable(dtrace_ecb_t *ecb)
-{
-	dtrace_probe_t *probe = ecb->dte_probe;
-
-	ASSERT(ecb->dte_next == NULL);
-
-	if (probe == NULL) {
-		/*
-		 * This is the NULL probe -- there's nothing to do.
-		 */
-		return;
-	}
-
-	if (probe->dtpr_ecb == NULL) {
-		dtrace_provider_t *prov = probe->dtpr_provider;
-
-		/*
-		 * We're the first ECB on this probe.
-		 */
-		probe->dtpr_ecb = probe->dtpr_ecb_last = ecb;
-
-		if (ecb->dte_predicate != NULL)
-			probe->dtpr_predcache = ecb->dte_predicate->dtp_cacheid;
-
-		prov->dtpv_pops.dtps_enable(prov->dtpv_arg,
-		    probe->dtpr_id, probe->dtpr_arg);
-	} else {
-		ASSERT(probe->dtpr_ecb_last != NULL);
-		probe->dtpr_ecb_last->dte_next = ecb;
-		probe->dtpr_ecb_last = ecb;
-		probe->dtpr_predcache = 0;
-	}
 }
 
 static int
@@ -2537,4 +2651,39 @@ dtrace_register(const char *name, const dtrace_pattr_t *pap, uint32_t priv,
 	}
 
 	return (0);
+}
+
+/*
+ * DTrace Predicate Functions
+ */
+static dtrace_predicate_t *
+dtrace_predicate_create(dtrace_difo_t *dp)
+{
+	dtrace_predicate_t *pred;
+
+	ASSERT(MUTEX_HELD(&dtrace_lock));
+	ASSERT(dp->dtdo_refcnt != 0);
+
+	pred = calloc(1, sizeof (dtrace_predicate_t));
+	pred->dtp_difo = dp;
+	pred->dtp_refcnt = 1;
+
+	if (!dtrace_difo_cacheable(dp))
+		return (pred);
+
+	if (dtrace_predcache_id == DTRACE_CACHEIDNONE) {
+		/*
+		 * This is only theoretically possible -- we have had 2^32
+		 * cacheable predicates on this machine.  We cannot allow any
+		 * more predicates to become cacheable:  as unlikely as it is,
+		 * there may be a thread caching a (now stale) predicate cache
+		 * ID. (N.B.: the temptation is being successfully resisted to
+		 * have this cmn_err() "Holy shit -- we executed this code!")
+		 */
+		return (pred);
+	}
+
+	pred->dtp_cacheid = dtrace_predcache_id++;
+
+	return (pred);
 }
