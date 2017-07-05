@@ -10,13 +10,349 @@
 #define	WPRINTF(...) (printf("Warning: " __VA_ARGS__))
 #define	DTRACE_ISALPHA(c)	\
 	(((c) >= 'a' && (c) <= 'z') || ((c) >= 'A' && (c) <= 'Z'))
+#define	DTRACE_DYNHASH_FREE	0
+#define	DTRACE_DYNHASH_SINK	1
+#define	DTRACE_DYNHASH_VALID	2
+
+#define	DTRACE_MATCH_NEXT	0
+#define	DTRACE_MATCH_DONE	1
+#define	DTRACE_ANCHORED(probe)	((probe)->dtpr_func[0] != '\0')
+#define	DTRACE_STATE_ALIGN	64
 
 dtrace_provider_t *dtrace_provider;
 static dtrace_enabling_t *dtrace_retained;
 static dtrace_genid_t	dtrace_retained_gen;	/* current retained enab gen */
 static dtrace_genid_t	dtrace_probegen;	/* current probe generation */
 
+static size_t dtrace_strlen(const char *, size_t);
+static dtrace_probe_t *dtrace_probe_lookup_id(dtrace_id_t id);
+static void dtrace_enabling_provide(dtrace_provider_t *);
+static int dtrace_enabling_match(dtrace_enabling_t *, int *);
+static void dtrace_enabling_matchall(void);
+static void dtrace_enabling_reap(void);
+static dtrace_state_t *dtrace_anon_grab(void);
+static void dtrace_buffer_drop(dtrace_buffer_t *);
+static int dtrace_buffer_consumed(dtrace_buffer_t *, hrtime_t when);
+static intptr_t dtrace_buffer_reserve(dtrace_buffer_t *, size_t, size_t,
+    dtrace_state_t *, dtrace_mstate_t *);
+static int dtrace_state_option(dtrace_state_t *, dtrace_optid_t,
+    dtrace_optval_t);
+static int dtrace_ecb_create_enable(dtrace_probe_t *, void *);
+uint16_t dtrace_load16(uintptr_t);
+uint32_t dtrace_load32(uintptr_t);
+uint64_t dtrace_load64(uintptr_t);
+uint8_t dtrace_load8(uintptr_t);
+void dtrace_dynvar_clean(dtrace_dstate_t *);
+dtrace_dynvar_t *dtrace_dynvar(dtrace_dstate_t *, uint_t, dtrace_key_t *,
+    size_t, dtrace_dynvar_op_t, dtrace_mstate_t *, dtrace_vstate_t *);
+uintptr_t dtrace_dif_varstr(uintptr_t, dtrace_state_t *, dtrace_mstate_t *);
+static int dtrace_priv_proc(dtrace_state_t *);
+static void dtrace_getf_barrier(void);
+static int dtrace_canload_remains(uint64_t, size_t, size_t *,
+    dtrace_mstate_t *, dtrace_vstate_t *);
+static int dtrace_canstore_remains(uint64_t, size_t, size_t *,
+    dtrace_mstate_t *, dtrace_vstate_t *);
+
 static void dtrace_nullop(void) {}
+
+static dtrace_ecb_t *
+dtrace_ecb_create(dtrace_state_t *state, dtrace_probe_t *probe,
+    dtrace_enabling_t *enab)
+{
+#if 0
+	dtrace_ecb_t *ecb;
+	dtrace_predicate_t *pred;
+	dtrace_actdesc_t *act;
+	dtrace_provider_t *prov;
+	dtrace_ecbdesc_t *desc = enab->dten_current;
+
+	ASSERT(state != NULL);
+
+	ecb = dtrace_ecb_add(state, probe);
+	ecb->dte_uarg = desc->dted_uarg;
+
+	if ((pred = desc->dted_pred.dtpdd_predicate) != NULL) {
+		dtrace_predicate_hold(pred);
+		ecb->dte_predicate = pred;
+	}
+
+	if (probe != NULL) {
+		/*
+		 * If the provider shows more leg than the consumer is old
+		 * enough to see, we need to enable the appropriate implicit
+		 * predicate bits to prevent the ecb from activating at
+		 * revealing times.
+		 *
+		 * Providers specifying DTRACE_PRIV_USER at register time
+		 * are stating that they need the /proc-style privilege
+		 * model to be enforced, and this is what DTRACE_COND_OWNER
+		 * and DTRACE_COND_ZONEOWNER will then do at probe time.
+		 */
+		prov = probe->dtpr_provider;
+		if (!(state->dts_cred.dcr_visible & DTRACE_CRV_ALLPROC) &&
+		    (prov->dtpv_priv.dtpp_flags & DTRACE_PRIV_USER))
+			ecb->dte_cond |= DTRACE_COND_OWNER;
+
+		if (!(state->dts_cred.dcr_visible & DTRACE_CRV_ALLZONE) &&
+		    (prov->dtpv_priv.dtpp_flags & DTRACE_PRIV_USER))
+			ecb->dte_cond |= DTRACE_COND_ZONEOWNER;
+
+		/*
+		 * If the provider shows us kernel innards and the user
+		 * is lacking sufficient privilege, enable the
+		 * DTRACE_COND_USERMODE implicit predicate.
+		 */
+		if (!(state->dts_cred.dcr_visible & DTRACE_CRV_KERNEL) &&
+		    (prov->dtpv_priv.dtpp_flags & DTRACE_PRIV_KERNEL))
+			ecb->dte_cond |= DTRACE_COND_USERMODE;
+	}
+
+	if (dtrace_ecb_create_cache != NULL) {
+		/*
+		 * If we have a cached ecb, we'll use its action list instead
+		 * of creating our own (saving both time and space).
+		 */
+		dtrace_ecb_t *cached = dtrace_ecb_create_cache;
+		dtrace_action_t *act = cached->dte_action;
+
+		if (act != NULL) {
+			ASSERT(act->dta_refcnt > 0);
+			act->dta_refcnt++;
+			ecb->dte_action = act;
+			ecb->dte_action_last = cached->dte_action_last;
+			ecb->dte_needed = cached->dte_needed;
+			ecb->dte_size = cached->dte_size;
+			ecb->dte_alignment = cached->dte_alignment;
+		}
+
+		return (ecb);
+	}
+
+	for (act = desc->dted_action; act != NULL; act = act->dtad_next) {
+		if ((enab->dten_error = dtrace_ecb_action_add(ecb, act)) != 0) {
+			dtrace_ecb_destroy(ecb);
+			return (NULL);
+		}
+	}
+
+	if ((enab->dten_error = dtrace_ecb_resize(ecb)) != 0) {
+		dtrace_ecb_destroy(ecb);
+		return (NULL);
+	}
+
+	return (dtrace_ecb_create_cache = ecb);
+#endif
+	return (NULL);
+}
+static void
+dtrace_ecb_enable(dtrace_ecb_t *ecb)
+{
+	dtrace_probe_t *probe = ecb->dte_probe;
+
+	ASSERT(ecb->dte_next == NULL);
+
+	if (probe == NULL) {
+		/*
+		 * This is the NULL probe -- there's nothing to do.
+		 */
+		return;
+	}
+
+	if (probe->dtpr_ecb == NULL) {
+		dtrace_provider_t *prov = probe->dtpr_provider;
+
+		/*
+		 * We're the first ECB on this probe.
+		 */
+		probe->dtpr_ecb = probe->dtpr_ecb_last = ecb;
+
+		if (ecb->dte_predicate != NULL)
+			probe->dtpr_predcache = ecb->dte_predicate->dtp_cacheid;
+
+		prov->dtpv_pops.dtps_enable(prov->dtpv_arg,
+		    probe->dtpr_id, probe->dtpr_arg);
+	} else {
+		/*
+		 * This probe is already active.  Swing the last pointer to
+		 * point to the new ECB, and issue a dtrace_sync() to assure
+		 * that all CPUs have seen the change.
+		 */
+		ASSERT(probe->dtpr_ecb_last != NULL);
+		probe->dtpr_ecb_last->dte_next = ecb;
+		probe->dtpr_ecb_last = ecb;
+		probe->dtpr_predcache = 0;
+	}
+}
+
+static int
+dtrace_match_glob(const char *s, const char *p, int depth)
+{
+	const char *olds;
+	char s1, c;
+	int gs;
+
+	if (depth > DTRACE_PROBEKEY_MAXDEPTH)
+		return (-1);
+
+	if (s == NULL)
+		s = ""; /* treat NULL as empty string */
+
+top:
+	olds = s;
+	s1 = *s++;
+
+	if (p == NULL)
+		return (0);
+
+	if ((c = *p++) == '\0')
+		return (s1 == '\0');
+
+	switch (c) {
+	case '[': {
+		int ok = 0, notflag = 0;
+		char lc = '\0';
+
+		if (s1 == '\0')
+			return (0);
+
+		if (*p == '!') {
+			notflag = 1;
+			p++;
+		}
+
+		if ((c = *p++) == '\0')
+			return (0);
+
+		do {
+			if (c == '-' && lc != '\0' && *p != ']') {
+				if ((c = *p++) == '\0')
+					return (0);
+				if (c == '\\' && (c = *p++) == '\0')
+					return (0);
+
+				if (notflag) {
+					if (s1 < lc || s1 > c)
+						ok++;
+					else
+						return (0);
+				} else if (lc <= s1 && s1 <= c)
+					ok++;
+
+			} else if (c == '\\' && (c = *p++) == '\0')
+				return (0);
+
+			lc = c; /* save left-hand 'c' for next iteration */
+
+			if (notflag) {
+				if (s1 != c)
+					ok++;
+				else
+					return (0);
+			} else if (s1 == c)
+				ok++;
+
+			if ((c = *p++) == '\0')
+				return (0);
+
+		} while (c != ']');
+
+		if (ok)
+			goto top;
+
+		return (0);
+	}
+
+	case '\\':
+		if ((c = *p++) == '\0')
+			return (0);
+		/*FALLTHRU*/
+
+	default:
+		if (c != s1)
+			return (0);
+		/*FALLTHRU*/
+
+	case '?':
+		if (s1 != '\0')
+			goto top;
+		return (0);
+
+	case '*':
+		while (*p == '*')
+			p++; /* consecutive *'s are identical to a single one */
+
+		if (*p == '\0')
+			return (1);
+
+		for (s = olds; *s != '\0'; s++) {
+			if ((gs = dtrace_match_glob(s, p, depth + 1)) != 0)
+				return (gs);
+		}
+
+		return (0);
+	}
+}
+
+
+static int
+dtrace_match_string(const char *s, const char *p, int depth)
+{
+	return (s != NULL && strcmp(s, p) == 0);
+}
+
+/*ARGSUSED*/
+static int
+dtrace_match_nul(const char *s, const char *p, int depth)
+{
+	return (1); /* always match the empty pattern */
+}
+
+static int
+dtrace_match_nonzero(const char *s, const char *p, int depth)
+{
+	return (s != NULL && s[0] != '\0');
+}
+
+static dtrace_probekey_f *
+dtrace_probekey_func(const char *p)
+{
+	char c;
+
+	if (p == NULL || *p == '\0')
+		return (&dtrace_match_nul);
+
+	while ((c = *p++) != '\0') {
+		if (c == '[' || c == '?' || c == '*' || c == '\\')
+			return (&dtrace_match_glob);
+	}
+
+	return (&dtrace_match_string);
+}
+
+static int
+dtrace_ecb_create_enable(dtrace_probe_t *probe, void *arg)
+{
+	dtrace_ecb_t *ecb;
+	dtrace_enabling_t *enab = arg;
+	dtrace_state_t *state = enab->dten_vstate->dtvs_state;
+
+	ASSERT(state != NULL);
+
+	if (probe != NULL && probe->dtpr_gen < enab->dten_probegen) {
+		/*
+		 * This probe was created in a generation for which this
+		 * enabling has previously created ECBs; we don't want to
+		 * enable it again, so just kick out.
+		 */
+		return (DTRACE_MATCH_NEXT);
+	}
+
+	if ((ecb = dtrace_ecb_create(state, probe, enab)) == NULL)
+		return (DTRACE_MATCH_DONE);
+
+	dtrace_ecb_enable(ecb);
+	return (DTRACE_MATCH_NEXT);
+}
 
 static int
 dtrace_probe_enable(dtrace_probedesc_t *desc, dtrace_enabling_t *enab)
