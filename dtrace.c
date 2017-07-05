@@ -15,6 +15,12 @@ dtrace_provider_t *dtrace_provider;
 
 static void dtrace_nullop(void) {}
 
+static void
+dtrace_enabling_provide(dtrace_provider_t *prv) {}
+
+static void
+dtrace_enabling_matchall(void) {}
+
 static int
 dtrace_badattr(const dtrace_attribute_t *a)
 {

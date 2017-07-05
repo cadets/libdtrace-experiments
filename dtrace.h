@@ -2158,11 +2158,13 @@ typedef enum dtrace_vtime_state {
 #ifdef illumos
 extern dtrace_vtime_state_t dtrace_vtime_active;
 #endif
+#if 0
 extern void dtrace_vtime_switch(kthread_t *next);
 extern void dtrace_vtime_enable_tnf(void);
 extern void dtrace_vtime_disable_tnf(void);
 extern void dtrace_vtime_enable(void);
 extern void dtrace_vtime_disable(void);
+#endif
 
 struct regs;
 struct reg;
@@ -2203,11 +2205,17 @@ extern hrtime_t dtrace_gethrtime(void);
 #else
 void dtrace_debug_printf(const char *, ...) __printflike(1, 2);
 #endif
+#if 0
+/*
+ * XXX: This is likely not even necessary. We are not running on SMP at this
+ * point, so synchronizing CPUs is likely not even relevant.
+ */
 extern void dtrace_sync(void);
 extern void dtrace_toxic_ranges(void (*)(uintptr_t, uintptr_t));
 extern void dtrace_xcall(processorid_t, dtrace_xcall_t, void *);
 extern void dtrace_vpanic(const char *, __va_list);
 extern void dtrace_panic(const char *, ...);
+#endif
 
 extern int dtrace_safe_defer_signal(void);
 extern void dtrace_safe_synchronous_signal(void);
