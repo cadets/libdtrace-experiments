@@ -31,6 +31,7 @@ static dtrace_genid_t	dtrace_retained_gen;	/* current retained enab gen */
 static dtrace_genid_t	dtrace_probegen;	/* current probe generation */
 static dtrace_ecb_t	*dtrace_ecb_create_cache; /* cached created ECB */
 static uint64_t		dtrace_vtime_references; /* number of vtimestamp refs */
+size_t		dtrace_strsize_default = 256;
 
 static size_t dtrace_strlen(const char *, size_t);
 static dtrace_probe_t *dtrace_probe_lookup_id(dtrace_id_t id);
@@ -74,6 +75,160 @@ dtrace_nullop(void)
 static void
 dtrace_vtime_enable(void)
 {}
+
+static void
+dtrace_vtime_disable(void)
+{}
+
+
+/*
+ * DTrace Predicate Functions
+ */
+static dtrace_predicate_t *
+dtrace_predicate_create(dtrace_difo_t *dp)
+{
+	dtrace_predicate_t *pred;
+
+	ASSERT(MUTEX_HELD(&dtrace_lock));
+	ASSERT(dp->dtdo_refcnt != 0);
+
+	pred = calloc(1, sizeof (dtrace_predicate_t));
+	pred->dtp_difo = dp;
+	pred->dtp_refcnt = 1;
+
+	if (!dtrace_difo_cacheable(dp))
+		return (pred);
+
+	if (dtrace_predcache_id == DTRACE_CACHEIDNONE) {
+		/*
+		 * This is only theoretically possible -- we have had 2^32
+		 * cacheable predicates on this machine.  We cannot allow any
+		 * more predicates to become cacheable:  as unlikely as it is,
+		 * there may be a thread caching a (now stale) predicate cache
+		 * ID. (N.B.: the temptation is being successfully resisted to
+		 * have this cmn_err() "Holy shit -- we executed this code!")
+		 */
+		return (pred);
+	}
+
+	pred->dtp_cacheid = dtrace_predcache_id++;
+
+	return (pred);
+}
+
+static void
+dtrace_predicate_hold(dtrace_predicate_t *pred)
+{
+	ASSERT(MUTEX_HELD(&dtrace_lock));
+	ASSERT(pred->dtp_difo != NULL && pred->dtp_difo->dtdo_refcnt != 0);
+	ASSERT(pred->dtp_refcnt > 0);
+
+	pred->dtp_refcnt++;
+}
+
+static void
+dtrace_difo_destroy(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
+{
+	int i;
+
+	ASSERT(dp->dtdo_refcnt == 0);
+
+	for (i = 0; i < dp->dtdo_varlen; i++) {
+		dtrace_difv_t *v = &dp->dtdo_vartab[i];
+		dtrace_statvar_t *svar, **svarp = NULL;
+		uint_t id;
+		uint8_t scope = v->dtdv_scope;
+		int *np = NULL;
+
+		switch (scope) {
+		case DIFV_SCOPE_THREAD:
+			continue;
+
+		case DIFV_SCOPE_LOCAL:
+			np = &vstate->dtvs_nlocals;
+			svarp = vstate->dtvs_locals;
+			break;
+
+		case DIFV_SCOPE_GLOBAL:
+			np = &vstate->dtvs_nglobals;
+			svarp = vstate->dtvs_globals;
+			break;
+
+		default:
+			ASSERT(0);
+		}
+
+		if ((id = v->dtdv_id) < DIF_VAR_OTHER_UBASE)
+			continue;
+
+		id -= DIF_VAR_OTHER_UBASE;
+		ASSERT(id < *np);
+
+		svar = svarp[id];
+		ASSERT(svar != NULL);
+		ASSERT(svar->dtsv_refcnt > 0);
+
+		if (--svar->dtsv_refcnt > 0)
+			continue;
+
+		if (svar->dtsv_size != 0) {
+			ASSERT(svar->dtsv_data != 0);
+			free((void *)(uintptr_t)svar->dtsv_data);
+		}
+
+		free(svar);
+		svarp[id] = NULL;
+	}
+
+	if (dp->dtdo_buf != NULL)
+		free(dp->dtdo_buf);
+	if (dp->dtdo_inttab != NULL)
+		free(dp->dtdo_inttab);
+	if (dp->dtdo_strtab != NULL)
+		free(dp->dtdo_strtab);
+	if (dp->dtdo_vartab != NULL)
+		free(dp->dtdo_vartab);
+
+	free(dp);
+}
+
+static void
+dtrace_difo_release(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
+{
+	int i;
+
+	ASSERT(MUTEX_HELD(&dtrace_lock));
+	ASSERT(dp->dtdo_refcnt != 0);
+
+	for (i = 0; i < dp->dtdo_varlen; i++) {
+		dtrace_difv_t *v = &dp->dtdo_vartab[i];
+
+		if (v->dtdv_id != DIF_VAR_VTIMESTAMP)
+			continue;
+
+		ASSERT(dtrace_vtime_references > 0);
+		if (--dtrace_vtime_references == 0)
+			dtrace_vtime_disable();
+	}
+
+	if (--dp->dtdo_refcnt == 0)
+		dtrace_difo_destroy(dp, vstate);
+}
+
+static void
+dtrace_predicate_release(dtrace_predicate_t *pred, dtrace_vstate_t *vstate)
+{
+	dtrace_difo_t *dp = pred->dtp_difo;
+
+	ASSERT(MUTEX_HELD(&dtrace_lock));
+	ASSERT(dp != NULL && dp->dtdo_refcnt != 0);
+	ASSERT(pred->dtp_refcnt > 0);
+
+	if (--pred->dtp_refcnt == 0) {
+		dtrace_difo_release(pred->dtp_difo, vstate);
+		free(pred);
+	}
+}
 
 static void
 dtrace_difo_hold(dtrace_difo_t *dp)
@@ -386,13 +541,19 @@ dtrace_difo_duplicate(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 
 	ASSERT(dp->dtdo_buf != NULL);
 	sz = dp->dtdo_len * sizeof (dif_instr_t);
-	new->dtdo_buf = kmem_alloc(sz, KM_SLEEP);
+	new->dtdo_buf = malloc(sz);
+	if (new->dtdo_buf == NULL)
+		return (NULL);
+
 	bcopy(dp->dtdo_buf, new->dtdo_buf, sz);
 	new->dtdo_len = dp->dtdo_len;
 
 	if (dp->dtdo_strtab != NULL) {
 		ASSERT(dp->dtdo_strlen != 0);
-		new->dtdo_strtab = kmem_alloc(dp->dtdo_strlen, KM_SLEEP);
+		new->dtdo_strtab = malloc(dp->dtdo_strlen);
+		if (new->dtdo_strtab == NULL)
+			return (NULL);
+
 		bcopy(dp->dtdo_strtab, new->dtdo_strtab, dp->dtdo_strlen);
 		new->dtdo_strlen = dp->dtdo_strlen;
 	}
@@ -400,7 +561,10 @@ dtrace_difo_duplicate(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 	if (dp->dtdo_inttab != NULL) {
 		ASSERT(dp->dtdo_intlen != 0);
 		sz = dp->dtdo_intlen * sizeof (uint64_t);
-		new->dtdo_inttab = kmem_alloc(sz, KM_SLEEP);
+		new->dtdo_inttab = malloc(sz);
+		if (new->dtdo_inttab == NULL)
+			return (NULL);
+
 		bcopy(dp->dtdo_inttab, new->dtdo_inttab, sz);
 		new->dtdo_intlen = dp->dtdo_intlen;
 	}
@@ -408,7 +572,10 @@ dtrace_difo_duplicate(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 	if (dp->dtdo_vartab != NULL) {
 		ASSERT(dp->dtdo_varlen != 0);
 		sz = dp->dtdo_varlen * sizeof (dtrace_difv_t);
-		new->dtdo_vartab = kmem_alloc(sz, KM_SLEEP);
+		new->dtdo_vartab = malloc(sz);
+		if (new->dtdo_vartab == NULL)
+			return (NULL);
+
 		bcopy(dp->dtdo_vartab, new->dtdo_vartab, sz);
 		new->dtdo_varlen = dp->dtdo_varlen;
 	}
@@ -417,28 +584,7 @@ dtrace_difo_duplicate(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 	return (new);
 }
 
-static void
-dtrace_difo_release(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
-{
-	int i;
 
-	ASSERT(MUTEX_HELD(&dtrace_lock));
-	ASSERT(dp->dtdo_refcnt != 0);
-
-	for (i = 0; i < dp->dtdo_varlen; i++) {
-		dtrace_difv_t *v = &dp->dtdo_vartab[i];
-
-		if (v->dtdv_id != DIF_VAR_VTIMESTAMP)
-			continue;
-
-		ASSERT(dtrace_vtime_references > 0);
-		if (--dtrace_vtime_references == 0)
-			dtrace_vtime_disable();
-	}
-
-	if (--dp->dtdo_refcnt == 0)
-		dtrace_difo_destroy(dp, vstate);
-}
 
 /*
  * Zero the specified region using a simple byte-by-byte loop.  Note that this
