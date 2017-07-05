@@ -11,6 +11,8 @@
 #define	DTRACE_ISALPHA(c)	\
 	(((c) >= 'a' && (c) <= 'z') || ((c) >= 'A' && (c) <= 'Z'))
 
+dtrace_provider_t *dtrace_provider;
+
 static void dtrace_nullop(void) {}
 
 static int
