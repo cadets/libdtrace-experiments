@@ -13,11 +13,69 @@
 
 dtrace_provider_t *dtrace_provider;
 static dtrace_enabling_t *dtrace_retained;
+static dtrace_genid_t	dtrace_retained_gen;	/* current retained enab gen */
 
 static void dtrace_nullop(void) {}
 
 static void
-dtrace_enabling_provide(dtrace_provider_t *prv) {}
+dtrace_probe_provide(dtrace_probedesc_t *desc, dtrace_provider_t *prv)
+{
+	int all = 0;
+
+	ASSERT(MUTEX_HELD(&dtrace_provider_lock));
+
+	if (prv == NULL) {
+		all = 1;
+		prv = dtrace_provider;
+	}
+
+	do {
+		/*
+		 * First, call the blanket provide operation.
+		 */
+		prv->dtpv_pops.dtps_provide(prv->dtpv_arg, desc);
+	} while (all && (prv = prv->dtpv_next) != NULL);
+}
+
+static void
+dtrace_enabling_provide(dtrace_provider_t *prv)
+{
+	int i, all = 0;
+	dtrace_probedesc_t desc;
+	dtrace_genid_t gen;
+
+	ASSERT(MUTEX_HELD(&dtrace_lock));
+	ASSERT(MUTEX_HELD(&dtrace_provider_lock));
+
+	if (prv == NULL) {
+		all = 1;
+		prv = dtrace_provider;
+	}
+
+	do {
+		dtrace_enabling_t *enab;
+		void *parg = prv->dtpv_arg;
+
+retry:
+		gen = dtrace_retained_gen;
+		for (enab = dtrace_retained; enab != NULL;
+		    enab = enab->dten_next) {
+			for (i = 0; i < enab->dten_ndesc; i++) {
+				desc = enab->dten_desc[i]->dted_probe;
+				prv->dtpv_pops.dtps_provide(parg, &desc);
+				/*
+				 * Process the retained enablings again if
+				 * they have changed while we weren't holding
+				 * dtrace_lock.
+				 */
+				if (gen != dtrace_retained_gen)
+					goto retry;
+			}
+		}
+	} while (all && (prv = prv->dtpv_next) != NULL);
+
+	dtrace_probe_provide(NULL, all ? NULL : prv);
+}
 
 static void
 dtrace_enabling_matchall(void) {}
