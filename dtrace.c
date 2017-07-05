@@ -14,8 +14,39 @@
 dtrace_provider_t *dtrace_provider;
 static dtrace_enabling_t *dtrace_retained;
 static dtrace_genid_t	dtrace_retained_gen;	/* current retained enab gen */
+static dtrace_genid_t	dtrace_probegen;	/* current probe generation */
 
 static void dtrace_nullop(void) {}
+
+static int
+dtrace_probe_enable(dtrace_probedesc_t *desc, dtrace_enabling_t *enab)
+{
+#if 0
+	dtrace_probekey_t pkey;
+	uint32_t priv;
+	uid_t uid;
+	zoneid_t zoneid;
+
+	dtrace_ecb_create_cache = NULL;
+
+	if (desc == NULL) {
+		/*
+		 * If we're passed a NULL description, we're being asked to
+		 * create an ECB with a NULL probe.
+		 */
+		(void) dtrace_ecb_create_enable(NULL, enab);
+		return (0);
+	}
+
+	dtrace_probekey(desc, &pkey);
+	dtrace_cred2priv(enab->dten_vstate->dtvs_state->dts_cred.dcr_cred,
+	    &priv, &uid, &zoneid);
+
+	return (dtrace_match(&pkey, priv, uid, zoneid, dtrace_ecb_create_enable,
+	    enab));
+#endif
+	return (0);
+}
 
 static void
 dtrace_probe_provide(dtrace_probedesc_t *desc, dtrace_provider_t *prv)
@@ -72,8 +103,71 @@ retry:
 	dtrace_probe_provide(NULL, all ? NULL : prv);
 }
 
+static int
+dtrace_enabling_match(dtrace_enabling_t *enab, int *nmatched)
+{
+	int i = 0;
+	int matched = 0;
+
+	for (i = 0; i < enab->dten_ndesc; i++) {
+		dtrace_ecbdesc_t *ep = enab->dten_desc[i];
+
+		enab->dten_current = ep;
+		enab->dten_error = 0;
+
+		matched += dtrace_probe_enable(&ep->dted_probe, enab);
+
+		if (enab->dten_error != 0) {
+			/*
+			 * If we get an error half-way through enabling the
+			 * probes, we kick out -- perhaps with some number of
+			 * them enabled.  Leaving enabled probes enabled may
+			 * be slightly confusing for user-level, but we expect
+			 * that no one will attempt to actually drive on in
+			 * the face of such errors.  If this is an anonymous
+			 * enabling (indicated with a NULL nmatched pointer),
+			 * we WPRINTF() a message.  We aren't expecting to
+			 * get such an error -- such as it can exist at all,
+			 * it would be a result of corrupted DOF in the driver
+			 * properties.
+			 */
+			if (nmatched == NULL) {
+				WPRINTF("dtrace_enabling_match() "
+				    "error on %p: %d", (void *)ep,
+				    enab->dten_error);
+			}
+
+			return (enab->dten_error);
+		}
+	}
+
+	enab->dten_probegen = dtrace_probegen;
+	if (nmatched != NULL)
+		*nmatched = matched;
+
+	return (0);
+}
+
+
 static void
-dtrace_enabling_matchall(void) {}
+dtrace_enabling_matchall(void)
+{
+	dtrace_enabling_t *enab;
+
+	/*
+	 * Iterate over all retained enablings to see if any probes match
+	 * against them.  We only perform this operation on enablings for which
+	 * we have sufficient permissions by virtue of being in the global zone
+	 * or in the same zone as the DTrace client.  Because we can be called
+	 * after dtrace_detach() has been called, we cannot assert that there
+	 * are retained enablings.  We can safely load from dtrace_retained,
+	 * however:  the taskq_destroy() at the end of dtrace_detach() will
+	 * block pending our completion.
+	 */
+	for (enab = dtrace_retained; enab != NULL; enab = enab->dten_next) {
+			(void) dtrace_enabling_match(enab, NULL);
+	}
+}
 
 static int
 dtrace_badattr(const dtrace_attribute_t *a)
