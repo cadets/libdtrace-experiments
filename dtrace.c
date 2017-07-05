@@ -99,6 +99,348 @@ dtrace_difo_hold(dtrace_difo_t *dp)
 }
 
 /*
+ * This routine calculates the dynamic variable chunksize for a given DIF
+ * object.  The calculation is not fool-proof, and can probably be tricked by
+ * malicious DIF -- but it works for all compiler-generated DIF.  Because this
+ * calculation is likely imperfect, dtrace_dynvar() is able to gracefully fail
+ * if a dynamic variable size exceeds the chunksize.
+ */
+static void
+dtrace_difo_chunksize(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
+{
+	uint64_t sval = 0;
+	dtrace_key_t tupregs[DIF_DTR_NREGS + 2]; /* +2 for thread and id */
+	const dif_instr_t *text = dp->dtdo_buf;
+	uint_t pc, srd = 0;
+	uint_t ttop = 0;
+	size_t size, ksize;
+	uint_t id, i;
+
+	for (pc = 0; pc < dp->dtdo_len; pc++) {
+		dif_instr_t instr = text[pc];
+		uint_t op = DIF_INSTR_OP(instr);
+		uint_t rd = DIF_INSTR_RD(instr);
+		uint_t r1 = DIF_INSTR_R1(instr);
+		uint_t nkeys = 0;
+		uchar_t scope = 0;
+
+		dtrace_key_t *key = tupregs;
+
+		switch (op) {
+		case DIF_OP_SETX:
+			sval = dp->dtdo_inttab[DIF_INSTR_INTEGER(instr)];
+			srd = rd;
+			continue;
+
+		case DIF_OP_STTS:
+			key = &tupregs[DIF_DTR_NREGS];
+			key[0].dttk_size = 0;
+			key[1].dttk_size = 0;
+			nkeys = 2;
+			scope = DIFV_SCOPE_THREAD;
+			break;
+
+		case DIF_OP_STGAA:
+		case DIF_OP_STTAA:
+			nkeys = ttop;
+
+			if (DIF_INSTR_OP(instr) == DIF_OP_STTAA)
+				key[nkeys++].dttk_size = 0;
+
+			key[nkeys++].dttk_size = 0;
+
+			if (op == DIF_OP_STTAA) {
+				scope = DIFV_SCOPE_THREAD;
+			} else {
+				scope = DIFV_SCOPE_GLOBAL;
+			}
+
+			break;
+
+		case DIF_OP_PUSHTR:
+			if (ttop == DIF_DTR_NREGS)
+				return;
+
+			if ((srd == 0 || sval == 0) && r1 == DIF_TYPE_STRING) {
+				/*
+				 * If the register for the size of the "pushtr"
+				 * is %r0 (or the value is 0) and the type is
+				 * a string, we'll use the system-wide default
+				 * string size.
+				 */
+				tupregs[ttop++].dttk_size =
+				    dtrace_strsize_default;
+			} else {
+				if (srd == 0)
+					return;
+
+				if (sval > LONG_MAX)
+					return;
+
+				tupregs[ttop++].dttk_size = sval;
+			}
+
+			break;
+
+		case DIF_OP_PUSHTV:
+			if (ttop == DIF_DTR_NREGS)
+				return;
+
+			tupregs[ttop++].dttk_size = 0;
+			break;
+
+		case DIF_OP_FLUSHTS:
+			ttop = 0;
+			break;
+
+		case DIF_OP_POPTS:
+			if (ttop != 0)
+				ttop--;
+			break;
+		}
+
+		sval = 0;
+		srd = 0;
+
+		if (nkeys == 0)
+			continue;
+
+		/*
+		 * We have a dynamic variable allocation; calculate its size.
+		 */
+		for (ksize = 0, i = 0; i < nkeys; i++)
+			ksize += P2ROUNDUP(key[i].dttk_size, sizeof (uint64_t));
+
+		size = sizeof (dtrace_dynvar_t);
+		size += sizeof (dtrace_key_t) * (nkeys - 1);
+		size += ksize;
+
+		/*
+		 * Now we need to determine the size of the stored data.
+		 */
+		id = DIF_INSTR_VAR(instr);
+
+		for (i = 0; i < dp->dtdo_varlen; i++) {
+			dtrace_difv_t *v = &dp->dtdo_vartab[i];
+
+			if (v->dtdv_id == id && v->dtdv_scope == scope) {
+				size += v->dtdv_type.dtdt_size;
+				break;
+			}
+		}
+
+		if (i == dp->dtdo_varlen)
+			return;
+
+		/*
+		 * We have the size.  If this is larger than the chunk size
+		 * for our dynamic variable state, reset the chunk size.
+		 */
+		size = P2ROUNDUP(size, sizeof (uint64_t));
+
+		/*
+		 * Before setting the chunk size, check that we're not going
+		 * to set it to a negative value...
+		 */
+		if (size > LONG_MAX)
+			return;
+
+		/*
+		 * ...and make certain that we didn't badly overflow.
+		 */
+		if (size < ksize || size < sizeof (dtrace_dynvar_t))
+			return;
+
+		if (size > vstate->dtvs_dynvars.dtds_chunksize)
+			vstate->dtvs_dynvars.dtds_chunksize = size;
+	}
+}
+
+static void
+dtrace_difo_init(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
+{
+	int i, oldsvars, osz, nsz, otlocals, ntlocals;
+	uint_t id;
+
+	ASSERT(MUTEX_HELD(&dtrace_lock));
+	ASSERT(dp->dtdo_buf != NULL && dp->dtdo_len != 0);
+
+	for (i = 0; i < dp->dtdo_varlen; i++) {
+		dtrace_difv_t *v = &dp->dtdo_vartab[i];
+		dtrace_statvar_t *svar, ***svarp = NULL;
+		size_t dsize = 0;
+		uint8_t scope = v->dtdv_scope;
+		int *np = NULL;
+
+		if ((id = v->dtdv_id) < DIF_VAR_OTHER_UBASE)
+			continue;
+
+		id -= DIF_VAR_OTHER_UBASE;
+
+		switch (scope) {
+		case DIFV_SCOPE_THREAD:
+			while (id >= (otlocals = vstate->dtvs_ntlocals)) {
+				dtrace_difv_t *tlocals;
+
+				if ((ntlocals = (otlocals << 1)) == 0)
+					ntlocals = 1;
+
+				osz = otlocals * sizeof (dtrace_difv_t);
+				nsz = ntlocals * sizeof (dtrace_difv_t);
+
+				tlocals = calloc(1, nsz);
+				if (tlocals == NULL)
+					return;
+
+				if (osz != 0) {
+					bcopy(vstate->dtvs_tlocals,
+					    tlocals, osz);
+					free(vstate->dtvs_tlocals);
+				}
+
+				vstate->dtvs_tlocals = tlocals;
+				vstate->dtvs_ntlocals = ntlocals;
+			}
+
+			vstate->dtvs_tlocals[id] = *v;
+			continue;
+
+		case DIFV_SCOPE_LOCAL:
+			np = &vstate->dtvs_nlocals;
+			svarp = &vstate->dtvs_locals;
+
+			if (v->dtdv_type.dtdt_flags & DIF_TF_BYREF)
+				dsize = NCPU * (v->dtdv_type.dtdt_size +
+				    sizeof (uint64_t));
+			else
+				dsize = NCPU * sizeof (uint64_t);
+
+			break;
+
+		case DIFV_SCOPE_GLOBAL:
+			np = &vstate->dtvs_nglobals;
+			svarp = &vstate->dtvs_globals;
+
+			if (v->dtdv_type.dtdt_flags & DIF_TF_BYREF)
+				dsize = v->dtdv_type.dtdt_size +
+				    sizeof (uint64_t);
+
+			break;
+
+		default:
+			ASSERT(0);
+		}
+
+		while (id >= (oldsvars = *np)) {
+			dtrace_statvar_t **statics;
+			int newsvars, oldsize, newsize;
+
+			if ((newsvars = (oldsvars << 1)) == 0)
+				newsvars = 1;
+
+			oldsize = oldsvars * sizeof (dtrace_statvar_t *);
+			newsize = newsvars * sizeof (dtrace_statvar_t *);
+
+			statics = calloc(1, newsize);
+			if (statics == NULL)
+				return;
+
+			if (oldsize != 0) {
+				bcopy(*svarp, statics, oldsize);
+				free(*svarp);
+			}
+
+			*svarp = statics;
+			*np = newsvars;
+		}
+
+		if ((svar = (*svarp)[id]) == NULL) {
+			svar = calloc(1, sizeof (dtrace_statvar_t));
+			svar->dtsv_var = *v;
+
+			if ((svar->dtsv_size = dsize) != 0) {
+				svar->dtsv_data = (uint64_t)(uintptr_t)
+				    calloc(1, dsize);
+			}
+
+			(*svarp)[id] = svar;
+		}
+
+		svar->dtsv_refcnt++;
+	}
+
+	dtrace_difo_chunksize(dp, vstate);
+	dtrace_difo_hold(dp);
+}
+
+static dtrace_difo_t *
+dtrace_difo_duplicate(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
+{
+	dtrace_difo_t *new;
+	size_t sz;
+
+	ASSERT(dp->dtdo_buf != NULL);
+	ASSERT(dp->dtdo_refcnt != 0);
+
+	new = calloc(1, sizeof (dtrace_difo_t));
+
+	ASSERT(dp->dtdo_buf != NULL);
+	sz = dp->dtdo_len * sizeof (dif_instr_t);
+	new->dtdo_buf = kmem_alloc(sz, KM_SLEEP);
+	bcopy(dp->dtdo_buf, new->dtdo_buf, sz);
+	new->dtdo_len = dp->dtdo_len;
+
+	if (dp->dtdo_strtab != NULL) {
+		ASSERT(dp->dtdo_strlen != 0);
+		new->dtdo_strtab = kmem_alloc(dp->dtdo_strlen, KM_SLEEP);
+		bcopy(dp->dtdo_strtab, new->dtdo_strtab, dp->dtdo_strlen);
+		new->dtdo_strlen = dp->dtdo_strlen;
+	}
+
+	if (dp->dtdo_inttab != NULL) {
+		ASSERT(dp->dtdo_intlen != 0);
+		sz = dp->dtdo_intlen * sizeof (uint64_t);
+		new->dtdo_inttab = kmem_alloc(sz, KM_SLEEP);
+		bcopy(dp->dtdo_inttab, new->dtdo_inttab, sz);
+		new->dtdo_intlen = dp->dtdo_intlen;
+	}
+
+	if (dp->dtdo_vartab != NULL) {
+		ASSERT(dp->dtdo_varlen != 0);
+		sz = dp->dtdo_varlen * sizeof (dtrace_difv_t);
+		new->dtdo_vartab = kmem_alloc(sz, KM_SLEEP);
+		bcopy(dp->dtdo_vartab, new->dtdo_vartab, sz);
+		new->dtdo_varlen = dp->dtdo_varlen;
+	}
+
+	dtrace_difo_init(new, vstate);
+	return (new);
+}
+
+static void
+dtrace_difo_release(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
+{
+	int i;
+
+	ASSERT(MUTEX_HELD(&dtrace_lock));
+	ASSERT(dp->dtdo_refcnt != 0);
+
+	for (i = 0; i < dp->dtdo_varlen; i++) {
+		dtrace_difv_t *v = &dp->dtdo_vartab[i];
+
+		if (v->dtdv_id != DIF_VAR_VTIMESTAMP)
+			continue;
+
+		ASSERT(dtrace_vtime_references > 0);
+		if (--dtrace_vtime_references == 0)
+			dtrace_vtime_disable();
+	}
+
+	if (--dp->dtdo_refcnt == 0)
+		dtrace_difo_destroy(dp, vstate);
+}
+
+/*
  * Zero the specified region using a simple byte-by-byte loop.  Note that this
  * is for safe DTrace-managed memory only.
  */
@@ -210,6 +552,15 @@ alloc_unr(struct unrhdr *uh)
 {
 	return (0);
 }
+
+/*
+ * FIXME: This has to be implemented in userspace.
+ * 
+ * In essence, this is just a counter.
+ */
+static void
+free_unr(struct unrhdr *uh, u_int item)
+{}
 
 static void
 dtrace_add_128(uint64_t *addend1, uint64_t *addend2, uint64_t *sum)
@@ -1039,6 +1390,22 @@ success:
 	return (&agg->dtag_action);
 }
 
+static void
+dtrace_ecb_aggregation_destroy(dtrace_ecb_t *ecb, dtrace_action_t *act)
+{
+	dtrace_aggregation_t *agg = (dtrace_aggregation_t *)act;
+	dtrace_state_t *state = ecb->dte_state;
+	dtrace_aggid_t aggid = agg->dtag_id;
+
+	ASSERT(DTRACEACT_ISAGG(act->dta_kind));
+	free_unr(state->dts_aggid_arena, aggid);
+
+	ASSERT(state->dts_aggregations[aggid - 1] == agg);
+	state->dts_aggregations[aggid - 1] = NULL;
+
+	free(agg);
+}
+
 static int
 dtrace_ecb_action_add(dtrace_ecb_t *ecb, dtrace_actdesc_t *desc)
 {
@@ -1291,6 +1658,134 @@ dtrace_ecb_action_add(dtrace_ecb_t *ecb, dtrace_actdesc_t *desc)
 	return (0);
 }
 
+static void
+dtrace_ecb_action_remove(dtrace_ecb_t *ecb)
+{
+	dtrace_action_t *act = ecb->dte_action, *next;
+	dtrace_vstate_t *vstate = &ecb->dte_state->dts_vstate;
+	dtrace_difo_t *dp;
+	uint16_t format;
+
+	if (act != NULL && act->dta_refcnt > 1) {
+		ASSERT(act->dta_next == NULL || act->dta_next->dta_refcnt == 1);
+		act->dta_refcnt--;
+	} else {
+		for (; act != NULL; act = next) {
+			next = act->dta_next;
+			ASSERT(next != NULL || act == ecb->dte_action_last);
+			ASSERT(act->dta_refcnt == 1);
+
+			if ((format = act->dta_rec.dtrd_format) != 0)
+				dtrace_format_remove(ecb->dte_state, format);
+
+			if ((dp = act->dta_difo) != NULL)
+				dtrace_difo_release(dp, vstate);
+
+			if (DTRACEACT_ISAGG(act->dta_kind)) {
+				dtrace_ecb_aggregation_destroy(ecb, act);
+			} else {
+				free(act);
+			}
+		}
+	}
+
+	ecb->dte_action = NULL;
+	ecb->dte_action_last = NULL;
+	ecb->dte_size = 0;
+}
+
+static void
+dtrace_ecb_disable(dtrace_ecb_t *ecb)
+{
+	/*
+	 * We disable the ECB by removing it from its probe.
+	 */
+	dtrace_ecb_t *pecb, *prev = NULL;
+	dtrace_probe_t *probe = ecb->dte_probe;
+
+	if (probe == NULL) {
+		/*
+		 * This is the NULL probe; there is nothing to disable.
+		 */
+		return;
+	}
+
+	for (pecb = probe->dtpr_ecb; pecb != NULL; pecb = pecb->dte_next) {
+		if (pecb == ecb)
+			break;
+		prev = pecb;
+	}
+
+	ASSERT(pecb != NULL);
+
+	if (prev == NULL) {
+		probe->dtpr_ecb = ecb->dte_next;
+	} else {
+		prev->dte_next = ecb->dte_next;
+	}
+
+	if (ecb == probe->dtpr_ecb_last) {
+		ASSERT(ecb->dte_next == NULL);
+		probe->dtpr_ecb_last = prev;
+	}
+
+	if (probe->dtpr_ecb == NULL) {
+		/*
+		 * That was the last ECB on the probe; clear the predicate
+		 * cache ID for the probe, disable it and sync one more time
+		 * to assure that we'll never hit it again.
+		 */
+		dtrace_provider_t *prov = probe->dtpr_provider;
+
+		ASSERT(ecb->dte_next == NULL);
+		ASSERT(probe->dtpr_ecb_last == NULL);
+		probe->dtpr_predcache = DTRACE_CACHEIDNONE;
+		prov->dtpv_pops.dtps_disable(prov->dtpv_arg,
+		    probe->dtpr_id, probe->dtpr_arg);
+	} else {
+		/*
+		 * There is at least one ECB remaining on the probe.  If there
+		 * is _exactly_ one, set the probe's predicate cache ID to be
+		 * the predicate cache ID of the remaining ECB.
+		 */
+		ASSERT(probe->dtpr_ecb_last != NULL);
+		ASSERT(probe->dtpr_predcache == DTRACE_CACHEIDNONE);
+
+		if (probe->dtpr_ecb == probe->dtpr_ecb_last) {
+			dtrace_predicate_t *p = probe->dtpr_ecb->dte_predicate;
+
+			ASSERT(probe->dtpr_ecb->dte_next == NULL);
+
+			if (p != NULL)
+				probe->dtpr_predcache = p->dtp_cacheid;
+		}
+
+		ecb->dte_next = NULL;
+	}
+}
+
+static void
+dtrace_ecb_destroy(dtrace_ecb_t *ecb)
+{
+	dtrace_state_t *state = ecb->dte_state;
+	dtrace_vstate_t *vstate = &state->dts_vstate;
+	dtrace_predicate_t *pred;
+	dtrace_epid_t epid = ecb->dte_epid;
+
+	ASSERT(ecb->dte_next == NULL);
+	ASSERT(ecb->dte_probe == NULL || ecb->dte_probe->dtpr_ecb != ecb);
+
+	if ((pred = ecb->dte_predicate) != NULL)
+		dtrace_predicate_release(pred, vstate);
+
+	dtrace_ecb_action_remove(ecb);
+
+	ASSERT(state->dts_ecbs[epid - 1] == ecb);
+	state->dts_ecbs[epid - 1] = NULL;
+
+	free(ecb);
+}
+
 static dtrace_ecb_t *
 dtrace_ecb_create(dtrace_state_t *state, dtrace_probe_t *probe,
     dtrace_enabling_t *enab)
@@ -1405,11 +1900,6 @@ dtrace_ecb_enable(dtrace_ecb_t *ecb)
 		prov->dtpv_pops.dtps_enable(prov->dtpv_arg,
 		    probe->dtpr_id, probe->dtpr_arg);
 	} else {
-		/*
-		 * This probe is already active.  Swing the last pointer to
-		 * point to the new ECB, and issue a dtrace_sync() to assure
-		 * that all CPUs have seen the change.
-		 */
 		ASSERT(probe->dtpr_ecb_last != NULL);
 		probe->dtpr_ecb_last->dte_next = ecb;
 		probe->dtpr_ecb_last = ecb;
