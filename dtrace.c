@@ -22,8 +22,6 @@ dtrace_probe_provide(dtrace_probedesc_t *desc, dtrace_provider_t *prv)
 {
 	int all = 0;
 
-	ASSERT(MUTEX_HELD(&dtrace_provider_lock));
-
 	if (prv == NULL) {
 		all = 1;
 		prv = dtrace_provider;
@@ -43,9 +41,6 @@ dtrace_enabling_provide(dtrace_provider_t *prv)
 	int i, all = 0;
 	dtrace_probedesc_t desc;
 	dtrace_genid_t gen;
-
-	ASSERT(MUTEX_HELD(&dtrace_lock));
-	ASSERT(MUTEX_HELD(&dtrace_provider_lock));
 
 	if (prv == NULL) {
 		all = 1;
@@ -206,8 +201,6 @@ dtrace_register(const char *name, const dtrace_pattr_t *pap, uint32_t priv,
 	*idp = (dtrace_provider_id_t)provider;
 
 	if (pops == &dtrace_provider_ops) {
-		ASSERT(MUTEX_HELD(&dtrace_provider_lock));
-		ASSERT(MUTEX_HELD(&dtrace_lock));
 		ASSERT(dtrace_anon.dta_enabling == NULL);
 
 		/*
