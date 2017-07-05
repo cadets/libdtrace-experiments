@@ -66,6 +66,9 @@ typedef int model_t;
 #include <stdint.h>
 #endif
 
+#include "cred_shim.h"
+#include "time_shim.h"
+
 /*
  * DTrace Universal Constants and Typedefs
  */
@@ -96,7 +99,6 @@ typedef int64_t dtrace_optval_t;	/* option value */
 typedef uint32_t dtrace_cacheid_t;	/* predicate cache identifier */
 typedef uint32_t uint_t;		/* userspace shim */
 typedef uint32_t zoneid_t;		/* userspace shim */
-typedef struct ucred cred_t;		/* userspace shim */
 typedef struct file file_t;		/* userspace shim */
 
 typedef enum dtrace_probespec {
@@ -2183,12 +2185,14 @@ extern void dtrace_interrupt_enable(dtrace_icookie_t);
 extern void dtrace_membar_producer(void);
 extern void dtrace_membar_consumer(void);
 
+#if 0
 extern void (*dtrace_cpu_init)(processorid_t);
 extern void (*dtrace_helpers_cleanup)(void);
 extern void (*dtrace_helpers_fork)(proc_t *parent, proc_t *child);
 extern void (*dtrace_cpustart_init)(void);
 extern void (*dtrace_cpustart_fini)(void);
 extern void (*dtrace_closef)(void);
+#endif
 
 extern void (*dtrace_debugger_init)(void);
 extern void (*dtrace_debugger_fini)(void);
@@ -2225,8 +2229,10 @@ extern void dtrace_getfsr(uint64_t *);
 #endif
 
 #ifndef illumos
+#if 0
 extern void dtrace_helpers_duplicate(proc_t *, proc_t *);
 extern void dtrace_helpers_destroy(proc_t *);
+#endif
 #endif
 
 #define	DTRACE_CPUFLAG_ISSET(flag) \
