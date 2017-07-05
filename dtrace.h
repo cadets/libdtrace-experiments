@@ -69,6 +69,8 @@ typedef int model_t;
 #include "cred_shim.h"
 #include "time_shim.h"
 
+#include <machine/frame.h>
+
 /*
  * DTrace Universal Constants and Typedefs
  */
@@ -100,6 +102,7 @@ typedef uint32_t dtrace_cacheid_t;	/* predicate cache identifier */
 typedef uint32_t uint_t;		/* userspace shim */
 typedef uint32_t zoneid_t;		/* userspace shim */
 typedef struct file file_t;		/* userspace shim */
+typedef unsigned char uchar_t;		/* userspace shim */
 
 typedef enum dtrace_probespec {
 	DTRACE_PROBESPEC_NONE = -1,

@@ -89,6 +89,7 @@ typedef struct dtrace_state dtrace_state_t;
 typedef uint32_t dtrace_optid_t;
 typedef uint32_t dtrace_specid_t;
 typedef uint64_t dtrace_genid_t;
+typedef uint64_t ulong_t; /* userspace shim */
 
 /*
  * DTrace Probes
@@ -1026,59 +1027,6 @@ typedef enum dtrace_activity {
 #define	DTRACE_HELPER_ACTION_USTACK	0
 #define	DTRACE_NHELPER_ACTIONS		1
 
-typedef struct dtrace_helper_action {
-	int dtha_generation;			/* helper action generation */
-	int dtha_nactions;			/* number of actions */
-	dtrace_difo_t *dtha_predicate;		/* helper action predicate */
-	dtrace_difo_t **dtha_actions;		/* array of actions */
-	struct dtrace_helper_action *dtha_next;	/* next helper action */
-} dtrace_helper_action_t;
-
-typedef struct dtrace_helper_provider {
-	int dthp_generation;			/* helper provider generation */
-	uint32_t dthp_ref;			/* reference count */
-	dof_helper_t dthp_prov;			/* DOF w/ provider and probes */
-} dtrace_helper_provider_t;
-
-typedef struct dtrace_helpers {
-	dtrace_helper_action_t **dthps_actions;	/* array of helper actions */
-	dtrace_vstate_t dthps_vstate;		/* helper action var. state */
-	dtrace_helper_provider_t **dthps_provs;	/* array of providers */
-	uint_t dthps_nprovs;			/* count of providers */
-	uint_t dthps_maxprovs;			/* provider array size */
-	int dthps_generation;			/* current generation */
-	pid_t dthps_pid;			/* pid of associated proc */
-	int dthps_deferred;			/* helper in deferred list */
-	struct dtrace_helpers *dthps_next;	/* next pointer */
-	struct dtrace_helpers *dthps_prev;	/* prev pointer */
-} dtrace_helpers_t;
-
-/*
- * DTrace Helper Action Tracing
- *
- * Debugging helper actions can be arduous.  To ease the development and
- * debugging of helpers, DTrace contains a tracing-framework-within-a-tracing-
- * framework: helper tracing.  If dtrace_helptrace_enabled is non-zero (which
- * it is by default on DEBUG kernels), all helper activity will be traced to a
- * global, in-kernel ring buffer.  Each entry includes a pointer to the specific
- * helper, the location within the helper, and a trace of all local variables.
- * The ring buffer may be displayed in a human-readable format with the
- * ::dtrace_helptrace mdb(1) dcmd.
- */
-#define	DTRACE_HELPTRACE_NEXT	(-1)
-#define	DTRACE_HELPTRACE_DONE	(-2)
-#define	DTRACE_HELPTRACE_ERR	(-3)
-
-typedef struct dtrace_helptrace {
-	dtrace_helper_action_t	*dtht_helper;	/* helper action */
-	int dtht_where;				/* where in helper action */
-	int dtht_nlocals;			/* number of locals */
-	int dtht_fault;				/* type of fault (if any) */
-	int dtht_fltoffs;			/* DIF offset */
-	uint64_t dtht_illval;			/* faulting value */
-	uint64_t dtht_locals[1];		/* local variables */
-} dtrace_helptrace_t;
-
 /*
  * DTrace Credentials
  *
@@ -1230,11 +1178,17 @@ typedef struct dtrace_enabling {
  * option.  As long as an anonymous DTrace enabling exists, dtrace(7D) will
  * refuse to unload.
  */
+#if 0
+/*
+ * XXX: Much like the anonymous state, we probably want this in the future, but
+ * not in userspace.
+ */
 typedef struct dtrace_anon {
 	dtrace_state_t *dta_state;		/* DTrace consumer state */
 	dtrace_enabling_t *dta_enabling;	/* pointer to enabling */
 	processorid_t dta_beganon;		/* which CPU BEGIN ran on */
 } dtrace_anon_t;
+#endif
 
 /*
  * DTrace Error Debugging

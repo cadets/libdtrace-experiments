@@ -12,6 +12,7 @@
 	(((c) >= 'a' && (c) <= 'z') || ((c) >= 'A' && (c) <= 'Z'))
 
 dtrace_provider_t *dtrace_provider;
+static dtrace_enabling_t *dtrace_retained;
 
 static void dtrace_nullop(void) {}
 

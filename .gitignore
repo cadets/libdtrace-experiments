@@ -1,2 +1,7 @@
 *.o
 .depend*
+*.pico
+*.po
+*.so.*
+*.so
+*.a
