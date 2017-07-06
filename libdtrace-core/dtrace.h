@@ -2240,6 +2240,7 @@ void dtrace_getfsr(uint64_t *);
 #endif
 
 int dtrace_init(void);
+int dtrace_deinit(void);
 
 #ifndef illumos
 #if 0

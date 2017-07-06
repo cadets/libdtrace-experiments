@@ -87,7 +87,6 @@ dtrace_vtime_disable(void)
 static void
 dtrace_predicate_hold(dtrace_predicate_t *pred)
 {
-	ASSERT(MUTEX_HELD(&dtrace_lock));
 	ASSERT(pred->dtp_difo != NULL && pred->dtp_difo->dtdo_refcnt != 0);
 	ASSERT(pred->dtp_refcnt > 0);
 
@@ -165,7 +164,6 @@ dtrace_difo_release(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 {
 	int i;
 
-	ASSERT(MUTEX_HELD(&dtrace_lock));
 	ASSERT(dp->dtdo_refcnt != 0);
 
 	for (i = 0; i < dp->dtdo_varlen; i++) {
@@ -188,7 +186,6 @@ dtrace_predicate_release(dtrace_predicate_t *pred, dtrace_vstate_t *vstate)
 {
 	dtrace_difo_t *dp = pred->dtp_difo;
 
-	ASSERT(MUTEX_HELD(&dtrace_lock));
 	ASSERT(dp != NULL && dp->dtdo_refcnt != 0);
 	ASSERT(pred->dtp_refcnt > 0);
 
@@ -435,7 +432,6 @@ dtrace_difo_init(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 	int i, oldsvars, osz, nsz, otlocals, ntlocals;
 	uint_t id;
 
-	ASSERT(MUTEX_HELD(&dtrace_lock));
 	ASSERT(dp->dtdo_buf != NULL && dp->dtdo_len != 0);
 
 	for (i = 0; i < dp->dtdo_varlen; i++) {
@@ -2669,7 +2665,6 @@ dtrace_predicate_create(dtrace_difo_t *dp)
 {
 	dtrace_predicate_t *pred;
 
-	ASSERT(MUTEX_HELD(&dtrace_lock));
 	ASSERT(dp->dtdo_refcnt != 0);
 
 	pred = calloc(1, sizeof (dtrace_predicate_t));
@@ -2696,6 +2691,149 @@ dtrace_predicate_create(dtrace_difo_t *dp)
 	return (pred);
 }
 
+/*
+ * Unregister the specified provider from the DTrace framework.  This should
+ * generally be called by DTrace providers in their detach(9E) entry point.
+ */
+int
+dtrace_unregister(dtrace_provider_id_t id)
+{
+	dtrace_provider_t *old = (dtrace_provider_t *)id;
+	dtrace_provider_t *prev = NULL;
+	int i, self = 0, noreap = 0;
+	dtrace_probe_t *probe, *first = NULL;
+
+	if (old->dtpv_pops.dtps_enable ==
+	    (void (*)(void *, dtrace_id_t, void *))dtrace_nullop) {
+		/*
+		 * If DTrace itself is the provider, we're called with locks
+		 * already held.
+		 */
+		ASSERT(old == dtrace_provider);
+#ifdef illumos
+		ASSERT(dtrace_devi != NULL);
+#endif
+		self = 1;
+
+		if (dtrace_provider->dtpv_next != NULL) {
+			/*
+			 * There's another provider here; return failure.
+			 */
+			return (EBUSY);
+		}
+	}
+
+	/*
+	 * If anyone has /dev/dtrace open, or if there are anonymous enabled
+	 * probes, we refuse to let providers slither away, unless this
+	 * provider has already been explicitly invalidated.
+	 */
+	if (!old->dtpv_defunct &&
+	    (dtrace_opens || (dtrace_anon.dta_state != NULL &&
+	    dtrace_anon.dta_state->dts_necbs > 0))) {
+		return (EBUSY);
+	}
+
+	/*
+	 * Attempt to destroy the probes associated with this provider.
+	 */
+	for (i = 0; i < dtrace_nprobes; i++) {
+		if ((probe = dtrace_probes[i]) == NULL)
+			continue;
+
+		if (probe->dtpr_provider != old)
+			continue;
+
+		if (probe->dtpr_ecb == NULL)
+			continue;
+
+		/*
+		 * If we are trying to unregister a defunct provider, and the
+		 * provider was made defunct within the interval dictated by
+		 * dtrace_unregister_defunct_reap, we'll (asynchronously)
+		 * attempt to reap our enablings.  To denote that the provider
+		 * should reattempt to unregister itself at some point in the
+		 * future, we will return a differentiable error code (EAGAIN
+		 * instead of EBUSY) in this case.
+		 */
+		if (dtrace_gethrtime() - old->dtpv_defunct >
+		    dtrace_unregister_defunct_reap)
+			noreap = 1;
+
+		if (noreap)
+			return (EBUSY);
+
+		(void) taskq_dispatch(dtrace_taskq,
+		    (task_func_t *)dtrace_enabling_reap, NULL, TQ_SLEEP);
+
+		return (EAGAIN);
+	}
+
+	/*
+	 * All of the probes for this provider are disabled; we can safely
+	 * remove all of them from their hash chains and from the probe array.
+	 */
+	for (i = 0; i < dtrace_nprobes; i++) {
+		if ((probe = dtrace_probes[i]) == NULL)
+			continue;
+
+		if (probe->dtpr_provider != old)
+			continue;
+
+		dtrace_probes[i] = NULL;
+
+		dtrace_hash_remove(dtrace_bymod, probe);
+		dtrace_hash_remove(dtrace_byfunc, probe);
+		dtrace_hash_remove(dtrace_byname, probe);
+
+		if (first == NULL) {
+			first = probe;
+			probe->dtpr_nextmod = NULL;
+		} else {
+			probe->dtpr_nextmod = first;
+			first = probe;
+		}
+	}
+
+	/*
+	 * The provider's probes have been removed from the hash chains and
+	 * from the probe array.  Now issue a dtrace_sync() to be sure that
+	 * everyone has cleared out from any probe array processing.
+	 */
+	dtrace_sync();
+
+	for (probe = first; probe != NULL; probe = first) {
+		first = probe->dtpr_nextmod;
+
+		old->dtpv_pops.dtps_destroy(old->dtpv_arg, probe->dtpr_id,
+		    probe->dtpr_arg);
+		free(probe->dtpr_mod);
+		free(probe->dtpr_func);
+		free(probe->dtpr_name);
+		free_unr(dtrace_arena, probe->dtpr_id);
+		free(probe);
+	}
+
+	if ((prev = dtrace_provider) == old) {
+		dtrace_provider = old->dtpv_next;
+	} else {
+		while (prev != NULL && prev->dtpv_next != old)
+			prev = prev->dtpv_next;
+
+		if (prev == NULL) {
+			panic("attempt to unregister non-existent "
+			    "dtrace provider %p\n", (void *)id);
+		}
+
+		prev->dtpv_next = old->dtpv_next;
+	}
+
+	free(old->dtpv_name);
+	free(old);
+
+	return (0);
+}
+
 int
 dtrace_init(void)
 {
@@ -2705,5 +2843,16 @@ dtrace_init(void)
 	err = dtrace_register("dtrace", &dtrace_provider_attr,
 	    DTRACE_PRIV_NONE, 0, &dtrace_provider_ops, NULL, &id);
 
+	dtrace_provider = (dtrace_provider_t *) id;
+
+	return (err);
+}
+
+int
+dtrace_deinit(void)
+{
+	int err;
+
+	err = dtrace_unregister((dtrace_provider_id_t) dtrace_provider);
 	return (err);
 }

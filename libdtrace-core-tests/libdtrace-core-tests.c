@@ -12,6 +12,20 @@ START_TEST(test_dtrace_init)
 }
 END_TEST
 
+START_TEST(test_dtrace_deinit)
+{
+	int err;
+
+	err = dtrace_init();
+	if (err != 0)
+		ck_abort_msg("DTrace not properly initialized");
+
+	err = dtrace_deinit();
+
+	ck_assert_int_eq(err, 0);
+}
+END_TEST
+
 static Suite *
 create_dtrace_suite(void)
 {
@@ -23,6 +37,7 @@ create_dtrace_suite(void)
 	tc_core = tcase_create("Core");
 
 	tcase_add_test(tc_core, test_dtrace_init);
+	tcase_add_test(tc_core, test_dtrace_deinit);
 	suite_add_tcase(s, tc_core);
 
 	return (s);
