@@ -1,12 +1,12 @@
 #include <check.h>
 
-#include "../src/dtrace.h"
-#include "../src/dtrace_impl.h"
+#include "../libdtrace-core/dtrace.h"
+#include "../libdtrace-core/dtrace_impl.h"
 
 START_TEST(test_dtrace_init)
 {
 	int err;
-	
+
 	err = dtrace_init();
 	ck_assert_int_eq(err, 0);
 }
