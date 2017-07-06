@@ -339,6 +339,15 @@ dtrace_hash_remove(dtrace_hash_t *hash, dtrace_probe_t *probe)
 }
 
 static void
+dtrace_cred2priv(cred_t *cr, uint32_t *privp, uid_t *uidp, zoneid_t *zoneidp)
+{
+	uint32_t priv;
+
+	priv = DTRACE_PRIV_ALL;
+	*privp = priv;
+}
+
+static void
 dtrace_difo_destroy(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 {
 	int i;
@@ -2789,6 +2798,34 @@ dtrace_ecb_create_enable(dtrace_probe_t *probe, void *arg)
 }
 
 static int
+dtrace_probe_enable(dtrace_probedesc_t *desc, dtrace_enabling_t *enab)
+{
+	dtrace_probekey_t pkey;
+	uint32_t priv;
+	uid_t uid;
+	zoneid_t zoneid;
+
+	dtrace_ecb_create_cache = NULL;
+
+	if (desc == NULL) {
+		/*
+		 * If we're passed a NULL description, we're being asked to
+		 * create an ECB with a NULL probe.
+		 */
+		(void) dtrace_ecb_create_enable(NULL, enab);
+		return (0);
+	}
+
+	dtrace_probekey(desc, &pkey);
+	dtrace_cred2priv(enab->dten_vstate->dtvs_state->dts_cred.dcr_cred,
+	    &priv, &uid, &zoneid);
+
+	return (dtrace_match(&pkey, priv, uid, zoneid, dtrace_ecb_create_enable,
+	    enab));
+}
+
+
+static int
 dtrace_enabling_match(dtrace_enabling_t *enab, int *nmatched)
 {
 	int i = 0;
@@ -3449,33 +3486,6 @@ dtrace_probe_foreach(uintptr_t offs)
 	dtrace_interrupt_enable(cookie);
 }
 #endif
-
-static int
-dtrace_probe_enable(dtrace_probedesc_t *desc, dtrace_enabling_t *enab)
-{
-	dtrace_probekey_t pkey;
-	uint32_t priv;
-	uid_t uid;
-	zoneid_t zoneid;
-
-	dtrace_ecb_create_cache = NULL;
-
-	if (desc == NULL) {
-		/*
-		 * If we're passed a NULL description, we're being asked to
-		 * create an ECB with a NULL probe.
-		 */
-		(void) dtrace_ecb_create_enable(NULL, enab);
-		return (0);
-	}
-
-	dtrace_probekey(desc, &pkey);
-	dtrace_cred2priv(enab->dten_vstate->dtvs_state->dts_cred.dcr_cred,
-	    &priv, &uid, &zoneid);
-
-	return (dtrace_match(&pkey, priv, uid, zoneid, dtrace_ecb_create_enable,
-	    enab));
-}
 
 int
 dtrace_init(void)
