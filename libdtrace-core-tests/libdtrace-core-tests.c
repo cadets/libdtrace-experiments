@@ -5,6 +5,10 @@
 #include "../libdtrace-core/dtrace.h"
 #include "../libdtrace-core/dtrace_impl.h"
 
+static void
+dtrace_nullop(void)
+{}
+
 START_TEST(test_dtrace_init)
 {
 	/*
@@ -60,10 +64,50 @@ END_TEST
 
 START_TEST(test_dtrace_register)
 {
+	dtrace_provider_id_t id;
+	int err;
+	size_t sz;
+	char (*provs)[DTRACE_PROVNAMELEN];
+
+	static dtrace_pops_t test_provider_ops = {
+		(void (*)(void *, dtrace_probedesc_t *))dtrace_nullop,
+		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+		NULL,
+		NULL,
+		NULL,
+		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop
+	};
+
+	static dtrace_pattr_t test_provider_attr = {
+	{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
+	{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
+	{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
+	{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
+	{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
+	};
 	/*
 	 * Test the provider registration
 	 */
 
+	err = dtrace_init();
+	if (err)
+		ck_abort_msg("DTrace not properly initialized");
+
+	err = dtrace_register("test provider", &test_provider_attr,
+	    DTRACE_PRIV_NONE, 0, &test_provider_ops, NULL, &id);
+	ck_assert_int_eq(err, 0);
+
+	provs = (char (*)[DTRACE_PROVNAMELEN]) dtrace_providers(&sz);
+	ck_assert_int_eq(sz, 2);
+	ck_assert_str_eq("dtrace", provs[0]);
+	ck_assert_str_eq("test provider", provs[1]);
+
+	err = dtrace_deinit();
+	if (err)
+		ck_abort_msg("DTrace not properly deinitialized");
 }
 END_TEST
 
@@ -89,6 +133,9 @@ create_dtrace_suite(void)
 	tcase_add_test(tc_core, test_dtrace_init);
 	tcase_add_test(tc_core, test_dtrace_deinit);
 	tcase_add_test(tc_core, test_dtrace_providers);
+	tcase_add_test(tc_core, test_dtrace_register);
+	tcase_add_test(tc_core, test_dtrace_probe_create);
+
 	suite_add_tcase(s, tc_core);
 
 	return (s);
