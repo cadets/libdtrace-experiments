@@ -1,4 +1,4 @@
-PROG=	libdtrace_tests
+PROG=	libdtrace-core-tests
 
 CFLAGS+=	-I/usr/local/include
 
