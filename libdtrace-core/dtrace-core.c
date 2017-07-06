@@ -2729,17 +2729,6 @@ dtrace_unregister(dtrace_provider_id_t id)
 	}
 
 	/*
-	 * If anyone has /dev/dtrace open, or if there are anonymous enabled
-	 * probes, we refuse to let providers slither away, unless this
-	 * provider has already been explicitly invalidated.
-	 */
-	if (!old->dtpv_defunct &&
-	    (dtrace_opens || (dtrace_anon.dta_state != NULL &&
-	    dtrace_anon.dta_state->dts_necbs > 0))) {
-		return (EBUSY);
-	}
-
-	/*
 	 * Attempt to destroy the probes associated with this provider.
 	 */
 	for (i = 0; i < dtrace_nprobes; i++) {
