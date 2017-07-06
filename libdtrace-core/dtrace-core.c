@@ -26,6 +26,7 @@
 #define	DT_MASK_LO 0x00000000FFFFFFFFULL
 #define	P2ROUNDUP(x, align)		(-(-(x) & -(align)))
 #define	P2PHASEUP(x, align, phase)	((phase) - (((phase) - (x)) & -(align)))
+#define	IS_P2ALIGNED(v, a) ((((uintptr_t)(v)) & ((uintptr_t)(a) - 1)) == 0)
 /*
  * DTrace Macros and Constants
  *
@@ -63,6 +64,7 @@ static dtrace_probe_t	**dtrace_probes;	/* array of all probes */
 static int		dtrace_nprobes;		/* number of probes */
 static int		dtrace_nprovs;		/* number of providers */
 static struct unrhdr	*dtrace_arena;		/* Probe ID number.     */
+static int dirty_hack = 1;
 
 static size_t dtrace_strlen(const char *, size_t);
 static dtrace_probe_t *dtrace_probe_lookup_id(dtrace_id_t id);
@@ -135,8 +137,8 @@ dtrace_vtime_disable(void)
 static void
 dtrace_predicate_hold(dtrace_predicate_t *pred)
 {
-	ASSERT(pred->dtp_difo != NULL && pred->dtp_difo->dtdo_refcnt != 0);
-	ASSERT(pred->dtp_refcnt > 0);
+	assert(pred->dtp_difo != NULL && pred->dtp_difo->dtdo_refcnt != 0);
+	assert(pred->dtp_refcnt > 0);
 
 	pred->dtp_refcnt++;
 }
@@ -198,7 +200,7 @@ dtrace_hash_destroy(dtrace_hash_t *hash)
 	int i;
 
 	for (i = 0; i < hash->dth_size; i++)
-		ASSERT(hash->dth_tab[i] == NULL);
+		assert(hash->dth_tab[i] == NULL);
 #endif
 
 	free(hash->dth_tab);
@@ -213,7 +215,7 @@ dtrace_hash_resize(dtrace_hash_t *hash)
 	int new_mask = new_size - 1;
 	dtrace_hashbucket_t **new_tab, *bucket, *next;
 
-	ASSERT((new_size & new_mask) == 0);
+	assert((new_size & new_mask) == 0);
 
 	new_tab = calloc(1, new_size * sizeof (void *));
 	assert(new_tab != NULL);
@@ -222,7 +224,7 @@ dtrace_hash_resize(dtrace_hash_t *hash)
 		for (bucket = hash->dth_tab[i]; bucket != NULL; bucket = next) {
 			dtrace_probe_t *probe = bucket->dthb_chain;
 
-			ASSERT(probe != NULL);
+			assert(probe != NULL);
 			ndx = DTRACE_HASHSTR(hash, probe) & new_mask;
 
 			next = bucket->dthb_next;
@@ -263,12 +265,12 @@ dtrace_hash_add(dtrace_hash_t *hash, dtrace_probe_t *new)
 
 add:
 	nextp = DTRACE_HASHNEXT(hash, new);
-	ASSERT(*nextp == NULL && *(DTRACE_HASHPREV(hash, new)) == NULL);
+	assert(*nextp == NULL && *(DTRACE_HASHPREV(hash, new)) == NULL);
 	*nextp = bucket->dthb_chain;
 
 	if (bucket->dthb_chain != NULL) {
 		prevp = DTRACE_HASHPREV(hash, bucket->dthb_chain);
-		ASSERT(*prevp == NULL);
+		assert(*prevp == NULL);
 		*prevp = new;
 	}
 
@@ -323,7 +325,7 @@ dtrace_hash_remove(dtrace_hash_t *hash, dtrace_probe_t *probe)
 			break;
 	}
 
-	ASSERT(bucket != NULL);
+	assert(bucket != NULL);
 
 	if (*prevp == NULL) {
 		if (*nextp == NULL) {
@@ -333,8 +335,8 @@ dtrace_hash_remove(dtrace_hash_t *hash, dtrace_probe_t *probe)
 			 */
 			dtrace_hashbucket_t *b = hash->dth_tab[ndx];
 
-			ASSERT(bucket->dthb_chain == probe);
-			ASSERT(b != NULL);
+			assert(bucket->dthb_chain == probe);
+			assert(b != NULL);
 
 			if (b == bucket) {
 				hash->dth_tab[ndx] = bucket->dthb_next;
@@ -344,7 +346,7 @@ dtrace_hash_remove(dtrace_hash_t *hash, dtrace_probe_t *probe)
 				b->dthb_next = bucket->dthb_next;
 			}
 
-			ASSERT(hash->dth_nbuckets > 0);
+			assert(hash->dth_nbuckets > 0);
 			hash->dth_nbuckets--;
 			free(bucket);
 			return;
@@ -373,7 +375,7 @@ dtrace_difo_destroy(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 {
 	int i;
 
-	ASSERT(dp->dtdo_refcnt == 0);
+	assert(dp->dtdo_refcnt == 0);
 
 	for (i = 0; i < dp->dtdo_varlen; i++) {
 		dtrace_difv_t *v = &dp->dtdo_vartab[i];
@@ -397,24 +399,24 @@ dtrace_difo_destroy(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 			break;
 
 		default:
-			ASSERT(0);
+			assert(0);
 		}
 
 		if ((id = v->dtdv_id) < DIF_VAR_OTHER_UBASE)
 			continue;
 
 		id -= DIF_VAR_OTHER_UBASE;
-		ASSERT(id < *np);
+		assert(id < *np);
 
 		svar = svarp[id];
-		ASSERT(svar != NULL);
-		ASSERT(svar->dtsv_refcnt > 0);
+		assert(svar != NULL);
+		assert(svar->dtsv_refcnt > 0);
 
 		if (--svar->dtsv_refcnt > 0)
 			continue;
 
 		if (svar->dtsv_size != 0) {
-			ASSERT(svar->dtsv_data != 0);
+			assert(svar->dtsv_data != 0);
 			free((void *)(uintptr_t)svar->dtsv_data);
 		}
 
@@ -439,7 +441,7 @@ dtrace_difo_release(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 {
 	int i;
 
-	ASSERT(dp->dtdo_refcnt != 0);
+	assert(dp->dtdo_refcnt != 0);
 
 	for (i = 0; i < dp->dtdo_varlen; i++) {
 		dtrace_difv_t *v = &dp->dtdo_vartab[i];
@@ -447,7 +449,7 @@ dtrace_difo_release(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 		if (v->dtdv_id != DIF_VAR_VTIMESTAMP)
 			continue;
 
-		ASSERT(dtrace_vtime_references > 0);
+		assert(dtrace_vtime_references > 0);
 		if (--dtrace_vtime_references == 0)
 			dtrace_vtime_disable();
 	}
@@ -461,8 +463,8 @@ dtrace_predicate_release(dtrace_predicate_t *pred, dtrace_vstate_t *vstate)
 {
 	dtrace_difo_t *dp = pred->dtp_difo;
 
-	ASSERT(dp != NULL && dp->dtdo_refcnt != 0);
-	ASSERT(pred->dtp_refcnt > 0);
+	assert(dp != NULL && dp->dtdo_refcnt != 0);
+	assert(pred->dtp_refcnt > 0);
 
 	if (--pred->dtp_refcnt == 0) {
 		dtrace_difo_release(pred->dtp_difo, vstate);
@@ -526,7 +528,7 @@ dtrace_difo_hold(dtrace_difo_t *dp)
 	int i;
 
 	dp->dtdo_refcnt++;
-	ASSERT(dp->dtdo_refcnt != 0);
+	assert(dp->dtdo_refcnt != 0);
 
 	/*
 	 * We need to check this DIF object for references to the variable
@@ -707,7 +709,7 @@ dtrace_difo_init(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 	int i, oldsvars, osz, nsz, otlocals, ntlocals;
 	uint_t id;
 
-	ASSERT(dp->dtdo_buf != NULL && dp->dtdo_len != 0);
+	assert(dp->dtdo_buf != NULL && dp->dtdo_len != 0);
 
 	for (i = 0; i < dp->dtdo_varlen; i++) {
 		dtrace_difv_t *v = &dp->dtdo_vartab[i];
@@ -772,7 +774,7 @@ dtrace_difo_init(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 			break;
 
 		default:
-			ASSERT(0);
+			assert(0);
 		}
 
 		while (id >= (oldsvars = *np)) {
@@ -823,12 +825,12 @@ dtrace_difo_duplicate(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 	dtrace_difo_t *new;
 	size_t sz;
 
-	ASSERT(dp->dtdo_buf != NULL);
-	ASSERT(dp->dtdo_refcnt != 0);
+	assert(dp->dtdo_buf != NULL);
+	assert(dp->dtdo_refcnt != 0);
 
 	new = calloc(1, sizeof (dtrace_difo_t));
 
-	ASSERT(dp->dtdo_buf != NULL);
+	assert(dp->dtdo_buf != NULL);
 	sz = dp->dtdo_len * sizeof (dif_instr_t);
 	new->dtdo_buf = malloc(sz);
 	if (new->dtdo_buf == NULL)
@@ -838,7 +840,7 @@ dtrace_difo_duplicate(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 	new->dtdo_len = dp->dtdo_len;
 
 	if (dp->dtdo_strtab != NULL) {
-		ASSERT(dp->dtdo_strlen != 0);
+		assert(dp->dtdo_strlen != 0);
 		new->dtdo_strtab = malloc(dp->dtdo_strlen);
 		if (new->dtdo_strtab == NULL)
 			return (NULL);
@@ -848,7 +850,7 @@ dtrace_difo_duplicate(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 	}
 
 	if (dp->dtdo_inttab != NULL) {
-		ASSERT(dp->dtdo_intlen != 0);
+		assert(dp->dtdo_intlen != 0);
 		sz = dp->dtdo_intlen * sizeof (uint64_t);
 		new->dtdo_inttab = malloc(sz);
 		if (new->dtdo_inttab == NULL)
@@ -859,7 +861,7 @@ dtrace_difo_duplicate(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 	}
 
 	if (dp->dtdo_vartab != NULL) {
-		ASSERT(dp->dtdo_varlen != 0);
+		assert(dp->dtdo_varlen != 0);
 		sz = dp->dtdo_varlen * sizeof (dtrace_difv_t);
 		new->dtdo_vartab = malloc(sz);
 		if (new->dtdo_vartab == NULL)
@@ -926,7 +928,7 @@ dtrace_format_add(dtrace_state_t *state, char *str)
 	assert(new != NULL);
 
 	if (state->dts_formats != NULL) {
-		ASSERT(ndx != 0);
+		assert(ndx != 0);
 		bcopy(state->dts_formats, new, ndx * sizeof (char *));
 		free(state->dts_formats);
 	}
@@ -942,9 +944,9 @@ dtrace_format_remove(dtrace_state_t *state, uint16_t format)
 {
 	char *fmt;
 
-	ASSERT(state->dts_formats != NULL);
-	ASSERT(format <= state->dts_nformats);
-	ASSERT(state->dts_formats[format - 1] != NULL);
+	assert(state->dts_formats != NULL);
+	assert(format <= state->dts_nformats);
+	assert(state->dts_formats[format - 1] != NULL);
 
 	fmt = state->dts_formats[format - 1];
 	free(fmt);
@@ -957,11 +959,11 @@ dtrace_format_destroy(dtrace_state_t *state)
 	int i;
 
 	if (state->dts_nformats == 0) {
-		ASSERT(state->dts_formats == NULL);
+		assert(state->dts_formats == NULL);
 		return;
 	}
 
-	ASSERT(state->dts_formats != NULL);
+	assert(state->dts_formats != NULL);
 
 	for (i = 0; i < state->dts_nformats; i++) {
 		char *fmt = state->dts_formats[i];
@@ -985,7 +987,7 @@ dtrace_format_destroy(dtrace_state_t *state)
 static int
 alloc_unr(struct unrhdr *uh)
 {
-	return (0);
+	return (dirty_hack++);
 }
 
 /*
@@ -1113,7 +1115,7 @@ dtrace_aggregate_quantize(uint64_t *quanta, uint64_t nval, uint64_t incr)
 		return;
 	}
 
-	ASSERT(0);
+	assert(0);
 }
 
 static void
@@ -1125,8 +1127,8 @@ dtrace_aggregate_lquantize(uint64_t *lquanta, uint64_t nval, uint64_t incr)
 	uint16_t levels = DTRACE_LQUANTIZE_LEVELS(arg);
 	int32_t val = (int32_t)nval, level;
 
-	ASSERT(step != 0);
-	ASSERT(levels != 0);
+	assert(step != 0);
+	assert(levels != 0);
 
 	if (val < base) {
 		/*
@@ -1156,8 +1158,8 @@ dtrace_aggregate_llquantize_bucket(uint16_t factor, uint16_t low,
 	int64_t this = 1, last, next;
 	int base = 1, order;
 
-	ASSERT(factor <= nsteps);
-	ASSERT(nsteps % factor == 0);
+	assert(factor <= nsteps);
+	assert(nsteps % factor == 0);
 
 	for (order = 0; order < low; order++)
 		this *= factor;
@@ -1307,7 +1309,7 @@ dtrace_aggregate(dtrace_aggregation_t *agg, dtrace_buffer_t *dbuf,
 	size = rec->dtrd_offset - agg->dtag_base;
 	fsize = size + rec->dtrd_size;
 
-	ASSERT(dbuf->dtb_tomax != NULL);
+	assert(dbuf->dtb_tomax != NULL);
 	data = dbuf->dtb_tomax + offset + agg->dtag_base;
 
 	if ((tomax = buf->dtb_tomax) == NULL) {
@@ -1356,8 +1358,8 @@ dtrace_aggregate(dtrace_aggregation_t *agg, dtrace_buffer_t *dbuf,
 			agb->dtagb_hash[i] = NULL;
 	}
 
-	ASSERT(agg->dtag_first != NULL);
-	ASSERT(agg->dtag_first->dta_intuple);
+	assert(agg->dtag_first != NULL);
+	assert(agg->dtag_first->dta_intuple);
 
 	/*
 	 * Calculate the hash value based on the key.  Note that we _don't_
@@ -1371,7 +1373,7 @@ dtrace_aggregate(dtrace_aggregation_t *agg, dtrace_buffer_t *dbuf,
 	for (act = agg->dtag_first; act->dta_intuple; act = act->dta_next) {
 		i = act->dta_rec.dtrd_offset - agg->dtag_base;
 		limit = i + act->dta_rec.dtrd_size;
-		ASSERT(limit <= size);
+		assert(limit <= size);
 		isstr = DTRACEACT_ISSTRING(act);
 
 		for (; i < limit; i++) {
@@ -1396,20 +1398,20 @@ dtrace_aggregate(dtrace_aggregation_t *agg, dtrace_buffer_t *dbuf,
 	ndx = hashval % agb->dtagb_hashsize;
 
 	for (key = agb->dtagb_hash[ndx]; key != NULL; key = key->dtak_next) {
-		ASSERT((caddr_t)key >= tomax);
-		ASSERT((caddr_t)key < tomax + buf->dtb_size);
+		assert((caddr_t)key >= tomax);
+		assert((caddr_t)key < tomax + buf->dtb_size);
 
 		if (hashval != key->dtak_hashval || key->dtak_size != size)
 			continue;
 
 		kdata = key->dtak_data;
-		ASSERT(kdata >= tomax && kdata < tomax + buf->dtb_size);
+		assert(kdata >= tomax && kdata < tomax + buf->dtb_size);
 
 		for (act = agg->dtag_first; act->dta_intuple;
 		    act = act->dta_next) {
 			i = act->dta_rec.dtrd_offset - agg->dtag_base;
 			limit = i + act->dta_rec.dtrd_size;
-			ASSERT(limit <= size);
+			assert(limit <= size);
 			isstr = DTRACEACT_ISSTRING(act);
 
 			for (; i < limit; i++) {
@@ -1464,7 +1466,7 @@ next:
 	}
 
 	/*CONSTCOND*/
-	ASSERT(!(sizeof (dtrace_aggkey_t) & (sizeof (uintptr_t) - 1)));
+	assert(!(sizeof (dtrace_aggkey_t) & (sizeof (uintptr_t) - 1)));
 	key = (dtrace_aggkey_t *)(agb->dtagb_free - sizeof (dtrace_aggkey_t));
 	agb->dtagb_free -= sizeof (dtrace_aggkey_t);
 
@@ -1492,7 +1494,7 @@ next:
 
 		i = act->dta_rec.dtrd_offset - agg->dtag_base;
 		limit = i + act->dta_rec.dtrd_size;
-		ASSERT(limit <= size);
+		assert(limit <= size);
 
 		for (nul = 0; i < limit; i++) {
 			if (nul) {
@@ -1596,10 +1598,10 @@ dtrace_ecb_add(dtrace_state_t *state, dtrace_probe_t *probe)
 		dtrace_ecb_t **oecbs = state->dts_ecbs, **ecbs;
 		int necbs = state->dts_necbs << 1;
 
-		ASSERT(epid == state->dts_necbs + 1);
+		assert(epid == state->dts_necbs + 1);
 
 		if (necbs == 0) {
-			ASSERT(oecbs == NULL);
+			assert(oecbs == NULL);
 			necbs = 1;
 		}
 
@@ -1623,7 +1625,7 @@ dtrace_ecb_add(dtrace_state_t *state, dtrace_probe_t *probe)
 
 	ecb->dte_state = state;
 
-	ASSERT(state->dts_ecbs[epid - 1] == NULL);
+	assert(state->dts_ecbs[epid - 1] == NULL);
 	dtrace_membar_producer();
 	state->dts_ecbs[(ecb->dte_epid = epid) - 1] = ecb;
 
@@ -1646,7 +1648,7 @@ dtrace_ecb_aggregation_create(dtrace_ecb_t *ecb, dtrace_actdesc_t *desc)
 		return (NULL);
 	agg->dtag_ecb = ecb;
 
-	ASSERT(DTRACEACT_ISAGG(desc->dtad_kind));
+	assert(DTRACEACT_ISAGG(desc->dtad_kind));
 
 	switch (desc->dtad_kind) {
 	case DTRACEAGG_MIN:
@@ -1754,7 +1756,7 @@ dtrace_ecb_aggregation_create(dtrace_ecb_t *ecb, dtrace_actdesc_t *desc)
 	/*
 	 * This n-tuple is short by ntuple elements.  Return failure.
 	 */
-	ASSERT(ntuple != 0);
+	assert(ntuple != 0);
 err:
 	free(agg);
 	return (NULL);
@@ -1764,11 +1766,11 @@ success:
 	 * If the last action in the tuple has a size of zero, it's actually
 	 * an expression argument for the aggregating action.
 	 */
-	ASSERT(ecb->dte_action_last != NULL);
+	assert(ecb->dte_action_last != NULL);
 	act = ecb->dte_action_last;
 
 	if (act->dta_kind == DTRACEACT_DIFEXPR) {
-		ASSERT(act->dta_difo != NULL);
+		assert(act->dta_difo != NULL);
 
 		if (act->dta_difo->dtdo_rtype.dtdt_size == 0)
 			agg->dtag_hasarg = 1;
@@ -1790,10 +1792,10 @@ success:
 		int naggs = state->dts_naggregations << 1;
 		int onaggs = state->dts_naggregations;
 
-		ASSERT(aggid == state->dts_naggregations + 1);
+		assert(aggid == state->dts_naggregations + 1);
 
 		if (naggs == 0) {
-			ASSERT(oaggs == NULL);
+			assert(oaggs == NULL);
 			naggs = 1;
 		}
 
@@ -1810,7 +1812,7 @@ success:
 		state->dts_naggregations = naggs;
 	}
 
-	ASSERT(state->dts_aggregations[aggid - 1] == NULL);
+	assert(state->dts_aggregations[aggid - 1] == NULL);
 	state->dts_aggregations[(agg->dtag_id = aggid) - 1] = agg;
 
 	frec = &agg->dtag_first->dta_rec;
@@ -1818,7 +1820,7 @@ success:
 		frec->dtrd_alignment = sizeof (dtrace_aggid_t);
 
 	for (act = agg->dtag_first; act != NULL; act = act->dta_next) {
-		ASSERT(!act->dta_intuple);
+		assert(!act->dta_intuple);
 		act->dta_intuple = 1;
 	}
 
@@ -1832,10 +1834,10 @@ dtrace_ecb_aggregation_destroy(dtrace_ecb_t *ecb, dtrace_action_t *act)
 	dtrace_state_t *state = ecb->dte_state;
 	dtrace_aggid_t aggid = agg->dtag_id;
 
-	ASSERT(DTRACEACT_ISAGG(act->dta_kind));
+	assert(DTRACEACT_ISAGG(act->dta_kind));
 	free_unr(state->dts_aggid_arena, aggid);
 
-	ASSERT(state->dts_aggregations[aggid - 1] == agg);
+	assert(state->dts_aggregations[aggid - 1] == agg);
 	state->dts_aggregations[aggid - 1] = NULL;
 
 	free(agg);
@@ -1853,7 +1855,7 @@ dtrace_ecb_action_add(dtrace_ecb_t *ecb, dtrace_actdesc_t *desc)
 	dtrace_optval_t *opt = state->dts_options, nframes = 0, strsize;
 	uint64_t arg = desc->dtad_arg;
 
-	ASSERT(ecb->dte_action == NULL || ecb->dte_action->dta_refcnt == 1);
+	assert(ecb->dte_action == NULL || ecb->dte_action->dta_refcnt == 1);
 
 	if (DTRACEACT_ISAGG(desc->dtad_kind)) {
 		/*
@@ -1892,13 +1894,13 @@ dtrace_ecb_action_add(dtrace_ecb_t *ecb, dtrace_actdesc_t *desc)
 			 * format.
 			 */
 			if (arg == 0) {
-				ASSERT(desc->dtad_kind == DTRACEACT_PRINTA ||
+				assert(desc->dtad_kind == DTRACEACT_PRINTA ||
 				    desc->dtad_kind == DTRACEACT_DIFEXPR);
 				format = 0;
 			} else {
-				ASSERT(arg != 0);
+				assert(arg != 0);
 #ifdef illumos
-				ASSERT(arg > KERNELBASE);
+				assert(arg > KERNELBASE);
 #endif
 				format = dtrace_format_add(state,
 				    (char *)(uintptr_t)arg);
@@ -1926,7 +1928,7 @@ dtrace_ecb_action_add(dtrace_ecb_t *ecb, dtrace_actdesc_t *desc)
 		case DTRACEACT_STACK:
 			if ((nframes = arg) == 0) {
 				nframes = opt[DTRACEOPT_STACKFRAMES];
-				ASSERT(nframes > 0);
+				assert(nframes > 0);
 				arg = nframes;
 			}
 
@@ -1948,7 +1950,7 @@ dtrace_ecb_action_add(dtrace_ecb_t *ecb, dtrace_actdesc_t *desc)
 			    (nframes = DTRACE_USTACK_NFRAMES(arg)) == 0) {
 				strsize = DTRACE_USTACK_STRSIZE(arg);
 				nframes = opt[DTRACEOPT_USTACKFRAMES];
-				ASSERT(nframes > 0);
+				assert(nframes > 0);
 				arg = DTRACE_USTACK_ARG(nframes, strsize);
 			}
 
@@ -2080,11 +2082,11 @@ dtrace_ecb_action_add(dtrace_ecb_t *ecb, dtrace_actdesc_t *desc)
 	rec->dtrd_format = format;
 
 	if ((last = ecb->dte_action_last) != NULL) {
-		ASSERT(ecb->dte_action != NULL);
+		assert(ecb->dte_action != NULL);
 		action->dta_prev = last;
 		last->dta_next = action;
 	} else {
-		ASSERT(ecb->dte_action == NULL);
+		assert(ecb->dte_action == NULL);
 		ecb->dte_action = action;
 	}
 
@@ -2102,13 +2104,13 @@ dtrace_ecb_action_remove(dtrace_ecb_t *ecb)
 	uint16_t format;
 
 	if (act != NULL && act->dta_refcnt > 1) {
-		ASSERT(act->dta_next == NULL || act->dta_next->dta_refcnt == 1);
+		assert(act->dta_next == NULL || act->dta_next->dta_refcnt == 1);
 		act->dta_refcnt--;
 	} else {
 		for (; act != NULL; act = next) {
 			next = act->dta_next;
-			ASSERT(next != NULL || act == ecb->dte_action_last);
-			ASSERT(act->dta_refcnt == 1);
+			assert(next != NULL || act == ecb->dte_action_last);
+			assert(act->dta_refcnt == 1);
 
 			if ((format = act->dta_rec.dtrd_format) != 0)
 				dtrace_format_remove(ecb->dte_state, format);
@@ -2151,7 +2153,7 @@ dtrace_ecb_disable(dtrace_ecb_t *ecb)
 		prev = pecb;
 	}
 
-	ASSERT(pecb != NULL);
+	assert(pecb != NULL);
 
 	if (prev == NULL) {
 		probe->dtpr_ecb = ecb->dte_next;
@@ -2160,7 +2162,7 @@ dtrace_ecb_disable(dtrace_ecb_t *ecb)
 	}
 
 	if (ecb == probe->dtpr_ecb_last) {
-		ASSERT(ecb->dte_next == NULL);
+		assert(ecb->dte_next == NULL);
 		probe->dtpr_ecb_last = prev;
 	}
 
@@ -2172,8 +2174,8 @@ dtrace_ecb_disable(dtrace_ecb_t *ecb)
 		 */
 		dtrace_provider_t *prov = probe->dtpr_provider;
 
-		ASSERT(ecb->dte_next == NULL);
-		ASSERT(probe->dtpr_ecb_last == NULL);
+		assert(ecb->dte_next == NULL);
+		assert(probe->dtpr_ecb_last == NULL);
 		probe->dtpr_predcache = DTRACE_CACHEIDNONE;
 		prov->dtpv_pops.dtps_disable(prov->dtpv_arg,
 		    probe->dtpr_id, probe->dtpr_arg);
@@ -2183,13 +2185,13 @@ dtrace_ecb_disable(dtrace_ecb_t *ecb)
 		 * is _exactly_ one, set the probe's predicate cache ID to be
 		 * the predicate cache ID of the remaining ECB.
 		 */
-		ASSERT(probe->dtpr_ecb_last != NULL);
-		ASSERT(probe->dtpr_predcache == DTRACE_CACHEIDNONE);
+		assert(probe->dtpr_ecb_last != NULL);
+		assert(probe->dtpr_predcache == DTRACE_CACHEIDNONE);
 
 		if (probe->dtpr_ecb == probe->dtpr_ecb_last) {
 			dtrace_predicate_t *p = probe->dtpr_ecb->dte_predicate;
 
-			ASSERT(probe->dtpr_ecb->dte_next == NULL);
+			assert(probe->dtpr_ecb->dte_next == NULL);
 
 			if (p != NULL)
 				probe->dtpr_predcache = p->dtp_cacheid;
@@ -2207,15 +2209,15 @@ dtrace_ecb_destroy(dtrace_ecb_t *ecb)
 	dtrace_predicate_t *pred;
 	dtrace_epid_t epid = ecb->dte_epid;
 
-	ASSERT(ecb->dte_next == NULL);
-	ASSERT(ecb->dte_probe == NULL || ecb->dte_probe->dtpr_ecb != ecb);
+	assert(ecb->dte_next == NULL);
+	assert(ecb->dte_probe == NULL || ecb->dte_probe->dtpr_ecb != ecb);
 
 	if ((pred = ecb->dte_predicate) != NULL)
 		dtrace_predicate_release(pred, vstate);
 
 	dtrace_ecb_action_remove(ecb);
 
-	ASSERT(state->dts_ecbs[epid - 1] == ecb);
+	assert(state->dts_ecbs[epid - 1] == ecb);
 	state->dts_ecbs[epid - 1] = NULL;
 
 	free(ecb);
@@ -2226,7 +2228,7 @@ dtrace_ecb_enable(dtrace_ecb_t *ecb)
 {
 	dtrace_probe_t *probe = ecb->dte_probe;
 
-	ASSERT(ecb->dte_next == NULL);
+	assert(ecb->dte_next == NULL);
 
 	if (probe == NULL) {
 		/*
@@ -2249,7 +2251,7 @@ dtrace_ecb_enable(dtrace_ecb_t *ecb)
 		prov->dtpv_pops.dtps_enable(prov->dtpv_arg,
 		    probe->dtpr_id, probe->dtpr_arg);
 	} else {
-		ASSERT(probe->dtpr_ecb_last != NULL);
+		assert(probe->dtpr_ecb_last != NULL);
 		probe->dtpr_ecb_last->dte_next = ecb;
 		probe->dtpr_ecb_last = ecb;
 		probe->dtpr_predcache = 0;
@@ -2272,7 +2274,7 @@ dtrace_ecb_resize(dtrace_ecb_t *ecb)
 
 	for (act = ecb->dte_action; act != NULL; act = act->dta_next) {
 		dtrace_recdesc_t *rec = &act->dta_rec;
-		ASSERT(rec->dtrd_size > 0 || rec->dtrd_alignment == 1);
+		assert(rec->dtrd_size > 0 || rec->dtrd_alignment == 1);
 
 		ecb->dte_alignment = MAX(ecb->dte_alignment,
 		    rec->dtrd_alignment);
@@ -2280,11 +2282,11 @@ dtrace_ecb_resize(dtrace_ecb_t *ecb)
 		if (DTRACEACT_ISAGG(act->dta_kind)) {
 			dtrace_aggregation_t *agg = (dtrace_aggregation_t *)act;
 
-			ASSERT(rec->dtrd_size != 0);
-			ASSERT(agg->dtag_first != NULL);
-			ASSERT(act->dta_prev->dta_intuple);
-			ASSERT(aggbase != UINT32_MAX);
-			ASSERT(curneeded != UINT32_MAX);
+			assert(rec->dtrd_size != 0);
+			assert(agg->dtag_first != NULL);
+			assert(act->dta_prev->dta_intuple);
+			assert(aggbase != UINT32_MAX);
+			assert(curneeded != UINT32_MAX);
 
 			agg->dtag_base = aggbase;
 
@@ -2304,14 +2306,14 @@ dtrace_ecb_resize(dtrace_ecb_t *ecb)
 				 * curneeded to be at offset 4 in an 8-byte
 				 * aligned block.
 				 */
-				ASSERT(act->dta_prev == NULL ||
+				assert(act->dta_prev == NULL ||
 				    !act->dta_prev->dta_intuple);
 				ASSERT3U(aggbase, ==, UINT32_MAX);
 				curneeded = P2PHASEUP(ecb->dte_size,
 				    sizeof (uint64_t), sizeof (dtrace_aggid_t));
 
 				aggbase = curneeded - sizeof (dtrace_aggid_t);
-				ASSERT(IS_P2ALIGNED(aggbase,
+				assert(IS_P2ALIGNED(aggbase,
 				    sizeof (uint64_t)));
 			}
 			curneeded = P2ROUNDUP(curneeded, rec->dtrd_alignment);
@@ -2321,7 +2323,7 @@ dtrace_ecb_resize(dtrace_ecb_t *ecb)
 			curneeded += rec->dtrd_size;
 		} else {
 			/* tuples must be followed by an aggregation */
-			ASSERT(act->dta_prev == NULL ||
+			assert(act->dta_prev == NULL ||
 			    !act->dta_prev->dta_intuple);
 
 			ecb->dte_size = P2ROUNDUP(ecb->dte_size,
@@ -2361,7 +2363,7 @@ dtrace_ecb_create(dtrace_state_t *state, dtrace_probe_t *probe,
 	dtrace_provider_t *prov;
 	dtrace_ecbdesc_t *desc = enab->dten_current;
 
-	ASSERT(state != NULL);
+	assert(state != NULL);
 
 	ecb = dtrace_ecb_add(state, probe);
 	ecb->dte_uarg = desc->dted_uarg;
@@ -2411,7 +2413,7 @@ dtrace_ecb_create(dtrace_state_t *state, dtrace_probe_t *probe,
 		dtrace_action_t *act = cached->dte_action;
 
 		if (act != NULL) {
-			ASSERT(act->dta_refcnt > 0);
+			assert(act->dta_refcnt > 0);
 			act->dta_refcnt++;
 			ecb->dte_action = act;
 			ecb->dte_action_last = cached->dte_action_last;
@@ -2657,8 +2659,6 @@ dtrace_match(const dtrace_probekey_t *pkp, uint32_t priv, uid_t uid,
 	int len, best = INT_MAX, nmatched = 0;
 	dtrace_id_t i;
 
-	ASSERT(MUTEX_HELD(&dtrace_lock));
-
 	/*
 	 * If the probe ID is specified in the key, just lookup by ID and
 	 * invoke the match callback once if a matching probe is found.
@@ -2800,7 +2800,7 @@ dtrace_ecb_create_enable(dtrace_probe_t *probe, void *arg)
 	dtrace_enabling_t *enab = arg;
 	dtrace_state_t *state = enab->dten_vstate->dtvs_state;
 
-	ASSERT(state != NULL);
+	assert(state != NULL);
 
 	if (probe != NULL && probe->dtpr_gen < enab->dten_probegen) {
 		/*
@@ -3015,7 +3015,7 @@ dtrace_register(const char *name, const dtrace_pattr_t *pap, uint32_t priv,
 	}
 
 	if (pops->dtps_suspend == NULL) {
-		ASSERT(pops->dtps_resume == NULL);
+		assert(pops->dtps_resume == NULL);
 		provider->dtpv_pops.dtps_suspend =
 		    (void (*)(void *, dtrace_id_t, void *))dtrace_nullop;
 		provider->dtpv_pops.dtps_resume =
@@ -3027,8 +3027,6 @@ dtrace_register(const char *name, const dtrace_pattr_t *pap, uint32_t priv,
 	dtrace_nprovs++;
 
 	if (pops == &dtrace_provider_ops) {
-		ASSERT(dtrace_anon.dta_enabling == NULL);
-
 		/*
 		 * We make sure that the DTrace provider is at the head of
 		 * the provider chain.
@@ -3074,7 +3072,7 @@ dtrace_predicate_create(dtrace_difo_t *dp)
 {
 	dtrace_predicate_t *pred;
 
-	ASSERT(dp->dtdo_refcnt != 0);
+	assert(dp->dtdo_refcnt != 0);
 
 	pred = calloc(1, sizeof (dtrace_predicate_t));
 	pred->dtp_difo = dp;
@@ -3118,7 +3116,7 @@ dtrace_unregister(dtrace_provider_id_t id)
 		 * If DTrace itself is the provider, we're called with locks
 		 * already held.
 		 */
-		ASSERT(old == dtrace_provider);
+		assert(old == dtrace_provider);
 		self = 1;
 
 		if (dtrace_provider->dtpv_next != NULL) {
@@ -3245,8 +3243,8 @@ dtrace_probe_create(dtrace_provider_id_t prov, const char *mod,
 		size_t nsize = osize << 1;
 
 		if (nsize == 0) {
-			ASSERT(osize == 0);
-			ASSERT(dtrace_probes == NULL);
+			assert(osize == 0);
+			assert(dtrace_probes == NULL);
 			nsize = sizeof (dtrace_probe_t *);
 		}
 
@@ -3254,7 +3252,7 @@ dtrace_probe_create(dtrace_provider_id_t prov, const char *mod,
 		assert(probes != NULL);
 
 		if (dtrace_probes == NULL) {
-			ASSERT(osize == 0);
+			assert(osize == 0);
 			dtrace_probes = probes;
 			dtrace_nprobes = 1;
 		} else {
@@ -3268,10 +3266,10 @@ dtrace_probe_create(dtrace_provider_id_t prov, const char *mod,
 			dtrace_nprobes <<= 1;
 		}
 
-		ASSERT(id - 1 < dtrace_nprobes);
+		assert(id - 1 < dtrace_nprobes);
 	}
 
-	ASSERT(dtrace_probes[id - 1] == NULL);
+	assert(dtrace_probes[id - 1] == NULL);
 	dtrace_probes[id - 1] = probe;
 
 	return (id);
@@ -3319,7 +3317,7 @@ dtrace_probe_lookup(dtrace_provider_id_t prid, char *mod,
 	match = dtrace_match(&pkey, DTRACE_PRIV_ALL, 0, 0,
 	    dtrace_probe_lookup_match, &id);
 
-	ASSERT(match == 1 || match == 0);
+	assert(match == 1 || match == 0);
 	return (match ? id : 0);
 }
 
