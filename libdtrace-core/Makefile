@@ -1,7 +1,7 @@
 LIB=		dtrace-core
 SHLIB_MAJOR=	0
 
-SRCS=		dtrace-core.c
+SRCS=		dtrace-core.c unr.c
 CFLAGS+=	-D_WANT_UCRED -D_WANT_FILE
 
 MAN=

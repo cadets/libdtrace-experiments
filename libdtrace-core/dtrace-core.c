@@ -7,6 +7,7 @@
 
 #include "dtrace.h"
 #include "dtrace_impl.h"
+#include "unr_shim.h"
 
 #define	WPRINTF(...) (printf("Warning: " __VA_ARGS__))
 #define	DTRACE_ISALPHA(c)	\
@@ -64,7 +65,6 @@ static dtrace_probe_t	**dtrace_probes;	/* array of all probes */
 static int		dtrace_nprobes;		/* number of probes */
 static int		dtrace_nprovs;		/* number of providers */
 static struct unrhdr	*dtrace_arena;		/* Probe ID number.     */
-static int dirty_hack = 1;
 
 static size_t dtrace_strlen(const char *, size_t);
 static dtrace_probe_t *dtrace_probe_lookup_id(dtrace_id_t id);
@@ -975,26 +975,6 @@ dtrace_format_destroy(dtrace_state_t *state)
 	state->dts_nformats = 0;
 	state->dts_formats = NULL;
 }
-
-/*
- * FIXME: This has to be implemented in userspace.
- * 
- * In essence, this is just a counter.
- */
-static int
-alloc_unr(struct unrhdr *uh)
-{
-	return (dirty_hack++);
-}
-
-/*
- * FIXME: This has to be implemented in userspace.
- * 
- * In essence, this is just a counter.
- */
-static void
-free_unr(struct unrhdr *uh, u_int item)
-{}
 
 static void
 dtrace_add_128(uint64_t *addend1, uint64_t *addend2, uint64_t *sum)

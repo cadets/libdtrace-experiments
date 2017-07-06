@@ -36,15 +36,27 @@ struct mtx {
 } unitmtx;
 
 static void
-mtx_lock(pthread_mutex_t *mp)
+mtx_lock(struct mtx *mp)
 {
-	pthread_mutex_lock(mp);
+	KASSERT(mp->state == 0, ("mutex already locked"));
+	mp->state = 1;
 }
 
 static void
-mtx_unlock(pthread_mutex_t *mp)
+mtx_unlock(struct mtx *mp)
 {
-	pthread_mutex_unlock(mp);
+	KASSERT(mp->state == 1, ("mutex not locked"));
+	mp->state = 0;
+}
+
+#define MA_OWNED	9
+
+static void
+mtx_assert(struct mtx *mp, int flag)
+{
+	if (flag == MA_OWNED) {
+		KASSERT(mp->state == 1, ("mtx_assert(MA_OWNED) not true"));
+	}
 }
 
 #define CTASSERT(foo)
@@ -188,6 +200,7 @@ clean_unrhdrl(struct unrhdr *uh)
 {
 	struct unr *up;
 
+	mtx_assert(uh->mtx, MA_OWNED);
 	while ((up = TAILQ_FIRST(&uh->ppfree)) != NULL) {
 		TAILQ_REMOVE(&uh->ppfree, up, list);
 		mtx_unlock(uh->mtx);
@@ -461,6 +474,7 @@ alloc_unrl(struct unrhdr *uh)
 	u_int x;
 	int y;
 
+	mtx_assert(uh->mtx, MA_OWNED);
 	check_unrhdr(uh, __LINE__);
 	x = uh->low + uh->first;
 
@@ -519,6 +533,7 @@ alloc_unr_specificl(struct unrhdr *uh, u_int item, void **p1, void **p2)
 	struct unrb *ub;
 	u_int i, last, tl;
 
+	mtx_assert(uh->mtx, MA_OWNED);
 
 	if (item < uh->low + uh->first || item > uh->high)
 		return (-1);

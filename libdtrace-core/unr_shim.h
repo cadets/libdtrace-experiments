@@ -2,7 +2,8 @@
 #define	_UNR_SHIM_H_
 
 #include <sys/queue.h>
-#include <pthread.h>
+
+struct mtx;
 
 struct unrhdr {
 	TAILQ_HEAD(unrhd,unr)	head;
@@ -12,10 +13,13 @@ struct unrhdr {
 	u_int			alloc;	/* Count of memory allocations */
 	u_int			first;	/* items in allocated from start */
 	u_int			last;	/* items free at end */
-	pthread_mutex_t		*mtx;
+	struct mtx		*mtx;
 	TAILQ_HEAD(unrfr,unr)	ppfree;	/* Items to be freed after mtx
 					   lock dropped */
 };
+
+void free_unr(struct unrhdr *, u_int);
+int alloc_unr(struct unrhdr *);
 
 #endif
 

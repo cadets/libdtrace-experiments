@@ -8,3 +8,4 @@
 *.full
 *.debug
 libdtrace-core-tests/libdtrace-core-tests
+*.core
