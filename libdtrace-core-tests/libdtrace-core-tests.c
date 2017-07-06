@@ -9,6 +9,26 @@ static void
 dtrace_nullop(void)
 {}
 
+static dtrace_pops_t test_provider_ops = {
+(void (*)(void *, dtrace_probedesc_t *))dtrace_nullop,
+(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+(void (*)(void *, dtrace_id_t, void *, dtrace_argdesc_t *))dtrace_nullop,
+(uint64_t (*)(void *, dtrace_id_t, void *, int, int))dtrace_nullop,
+(int (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+(void (*)(void *, dtrace_id_t, void *))dtrace_nullop
+};
+
+static dtrace_pattr_t test_provider_attr = {
+{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
+{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
+{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
+{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
+{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
+};
+
 START_TEST(test_dtrace_init)
 {
 	/*
@@ -69,25 +89,6 @@ START_TEST(test_dtrace_register)
 	size_t sz;
 	char (*provs)[DTRACE_PROVNAMELEN];
 
-	static dtrace_pops_t test_provider_ops = {
-		(void (*)(void *, dtrace_probedesc_t *))dtrace_nullop,
-		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-		(void (*)(void *, dtrace_id_t, void *, dtrace_argdesc_t *))dtrace_nullop,
-		(uint64_t (*)(void *, dtrace_id_t, void *, int, int))dtrace_nullop,
-		(int (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop
-	};
-
-	static dtrace_pattr_t test_provider_attr = {
-	{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
-	{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
-	{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
-	{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
-	{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
-	};
 	/*
 	 * Test the provider registration
 	 */
