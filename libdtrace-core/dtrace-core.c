@@ -35,6 +35,11 @@ static dtrace_genid_t	dtrace_probegen;	/* current probe generation */
 static dtrace_ecb_t	*dtrace_ecb_create_cache; /* cached created ECB */
 static uint64_t		dtrace_vtime_references; /* number of vtimestamp refs */
 size_t		dtrace_strsize_default = 256;
+static dtrace_hash_t	*dtrace_bymod;		/* probes hashed by module */
+static dtrace_hash_t	*dtrace_byfunc;		/* probes hashed by function */
+static dtrace_hash_t	*dtrace_byname;		/* probes hashed by name */
+static dtrace_probe_t	**dtrace_probes;	/* array of all probes */
+static int		dtrace_nprobes;		/* number of probes */
 
 static size_t dtrace_strlen(const char *, size_t);
 static dtrace_probe_t *dtrace_probe_lookup_id(dtrace_id_t id);
