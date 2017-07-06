@@ -157,7 +157,6 @@ void
 dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
     uintptr_t arg2, uintptr_t arg3, uintptr_t arg4)
 {
-	processorid_t cpuid;
 	dtrace_icookie_t cookie;
 	dtrace_probe_t *probe;
 	dtrace_mstate_t mstate;
@@ -169,52 +168,21 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 	volatile uint16_t *flags;
 	hrtime_t now;
 
-	if (panicstr != NULL)
-		return;
-
-#ifdef illumos
-	/*
-	 * Kick out immediately if this CPU is still being born (in which case
-	 * curthread will be set to -1) or the current thread can't allow
-	 * probes in its current context.
-	 */
-	if (((uintptr_t)curthread & 1) || (curthread->t_flag & T_DONTDTRACE))
-		return;
-#endif
-
-	cookie = dtrace_interrupt_disable();
 	probe = dtrace_probes[id - 1];
-	cpuid = curcpu;
-	onintr = CPU_ON_INTR(CPU);
 
-	if (!onintr && probe->dtpr_predcache != DTRACE_CACHEIDNONE &&
-	    probe->dtpr_predcache == curthread->t_predcache) {
-		/*
-		 * We have hit in the predicate cache; we know that
-		 * this predicate would evaluate to be false.
-		 */
-		dtrace_interrupt_enable(cookie);
-		return;
-	}
-
-#ifdef illumos
-	if (panic_quiesce) {
-#else
-	if (panicstr != NULL) {
-#endif
-		/*
-		 * We don't trace anything if we're panicking.
-		 */
-		dtrace_interrupt_enable(cookie);
-		return;
-	}
-
+	/*
+	 * TODO: We need a way to ask for a timestamp from the kernel in an
+	 * efficient, but safe way. This should also be as high resolution as
+	 * possible.
+	 */
+#if 0
 	now = mstate.dtms_timestamp = dtrace_gethrtime();
 	mstate.dtms_present |= DTRACE_MSTATE_TIMESTAMP;
 	vtime = dtrace_vtime_references != 0;
 
 	if (vtime && curthread->t_dtrace_start)
 		curthread->t_dtrace_vtime += now - curthread->t_dtrace_start;
+#endif
 
 	mstate.dtms_difo = NULL;
 	mstate.dtms_probe = probe;
@@ -225,13 +193,24 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 	mstate.dtms_arg[3] = arg3;
 	mstate.dtms_arg[4] = arg4;
 
+	/*
+	 * XXX: This might become something else eventually...?
+	 */
+#if 0
 	flags = (volatile uint16_t *)&cpu_core[cpuid].cpuc_dtrace_flags;
+#endif
 
 	for (ecb = probe->dtpr_ecb; ecb != NULL; ecb = ecb->dte_next) {
 		dtrace_predicate_t *pred = ecb->dte_predicate;
 		dtrace_state_t *state = ecb->dte_state;
+		/*
+		 * TODO: We still want to aggregate, but definitely not by
+		 * cpuid.
+		 */
+#if 0
 		dtrace_buffer_t *buf = &state->dts_buffer[cpuid];
 		dtrace_buffer_t *aggbuf = &state->dts_aggbuffer[cpuid];
+#endif
 		dtrace_vstate_t *vstate = &state->dts_vstate;
 		dtrace_provider_t *prov = probe->dtpr_provider;
 		uint64_t tracememsize = 0;
@@ -253,7 +232,9 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 		mstate.dtms_present = DTRACE_MSTATE_ARGS | DTRACE_MSTATE_PROBE;
 		mstate.dtms_getf = NULL;
 
+#if 0
 		*flags &= ~CPU_DTRACE_ERROR;
+#endif
 
 		if (prov == dtrace_provider) {
 			/*
@@ -303,55 +284,14 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 			    prov->dtpv_pops.dtps_usermode(prov->dtpv_arg,
 			    probe->dtpr_id, probe->dtpr_arg) == 0)
 				continue;
-
-#ifdef illumos
-			/*
-			 * This is more subtle than it looks. We have to be
-			 * absolutely certain that CRED() isn't going to
-			 * change out from under us so it's only legit to
-			 * examine that structure if we're in constrained
-			 * situations. Currently, the only times we'll this
-			 * check is if a non-super-user has enabled the
-			 * profile or syscall providers -- providers that
-			 * allow visibility of all processes. For the
-			 * profile case, the check above will ensure that
-			 * we're examining a user context.
-			 */
-			if (ecb->dte_cond & DTRACE_COND_OWNER) {
-				cred_t *cr;
-				cred_t *s_cr =
-				    ecb->dte_state->dts_cred.dcr_cred;
-				proc_t *proc;
-
-				ASSERT(s_cr != NULL);
-
-				if ((cr = CRED()) == NULL ||
-				    s_cr->cr_uid != cr->cr_uid ||
-				    s_cr->cr_uid != cr->cr_ruid ||
-				    s_cr->cr_uid != cr->cr_suid ||
-				    s_cr->cr_gid != cr->cr_gid ||
-				    s_cr->cr_gid != cr->cr_rgid ||
-				    s_cr->cr_gid != cr->cr_sgid ||
-				    (proc = ttoproc(curthread)) == NULL ||
-				    (proc->p_flag & SNOCD))
-					continue;
-			}
-
-			if (ecb->dte_cond & DTRACE_COND_ZONEOWNER) {
-				cred_t *cr;
-				cred_t *s_cr =
-				    ecb->dte_state->dts_cred.dcr_cred;
-
-				ASSERT(s_cr != NULL);
-
-				if ((cr = CRED()) == NULL ||
-				    s_cr->cr_zone->zone_id !=
-				    cr->cr_zone->zone_id)
-					continue;
-			}
-#endif
 		}
 
+		/*
+		 * TODO: Here we want to enable destructive actions, but it's
+		 * unclear as to how to do so (at least to me). We could set
+		 * some sort of a flag and have a co-processor in the kernel...?
+		 */
+#if 0
 		if (now - state->dts_alive > dtrace_deadman_timeout) {
 			/*
 			 * We seem to be dead.  Unless we (a) have kernel
@@ -375,6 +315,7 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 				continue;
 			}
 		}
+#endif
 
 		if ((offs = dtrace_buffer_reserve(buf, ecb->dte_needed,
 		    ecb->dte_alignment, state, &mstate)) < 0)
