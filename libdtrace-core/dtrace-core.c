@@ -99,6 +99,224 @@ dtrace_predicate_hold(dtrace_predicate_t *pred)
 	pred->dtp_refcnt++;
 }
 
+/*
+ * DTrace Probe Hashing Functions
+ *
+ * The functions in this section (and indeed, the functions in remaining
+ * sections) are not _called_ from probe context.  (Any exceptions to this are
+ * marked with a "Note:".)  Rather, they are called from elsewhere in the
+ * DTrace framework to look-up probes in, add probes to and remove probes from
+ * the DTrace probe hashes.  (Each probe is hashed by each element of the
+ * probe tuple -- allowing for fast lookups, regardless of what was
+ * specified.)
+ */
+static uint_t
+dtrace_hash_str(const char *p)
+{
+	unsigned int g;
+	uint_t hval = 0;
+
+	while (*p) {
+		hval = (hval << 4) + *p++;
+		if ((g = (hval & 0xf0000000)) != 0)
+			hval ^= g >> 24;
+		hval &= ~g;
+	}
+	return (hval);
+}
+
+static dtrace_hash_t *
+dtrace_hash_create(uintptr_t stroffs, uintptr_t nextoffs, uintptr_t prevoffs)
+{
+	dtrace_hash_t *hash = calloc(1, sizeof (dtrace_hash_t));
+
+	if (hash == NULL)
+		return (NULL);
+
+	hash->dth_stroffs = stroffs;
+	hash->dth_nextoffs = nextoffs;
+	hash->dth_prevoffs = prevoffs;
+
+	hash->dth_size = 1;
+	hash->dth_mask = hash->dth_size - 1;
+
+	hash->dth_tab = calloc(hash->dth_size * sizeof (dtrace_hashbucket_t *));
+	if (hash->dth_tab) {
+		free(hash);
+		hash = NULL;
+	}
+
+	return (hash);
+}
+
+static void
+dtrace_hash_destroy(dtrace_hash_t *hash)
+{
+#ifdef DEBUG
+	int i;
+
+	for (i = 0; i < hash->dth_size; i++)
+		ASSERT(hash->dth_tab[i] == NULL);
+#endif
+
+	free(hash->dth_tab);
+	free(hash);
+}
+
+static void
+dtrace_hash_resize(dtrace_hash_t *hash)
+{
+	int size = hash->dth_size, i, ndx;
+	int new_size = hash->dth_size << 1;
+	int new_mask = new_size - 1;
+	dtrace_hashbucket_t **new_tab, *bucket, *next;
+
+	ASSERT((new_size & new_mask) == 0);
+
+	new_tab = calloc(1, new_size * sizeof (void *));
+	assert(new_tab != NULL);
+
+	for (i = 0; i < size; i++) {
+		for (bucket = hash->dth_tab[i]; bucket != NULL; bucket = next) {
+			dtrace_probe_t *probe = bucket->dthb_chain;
+
+			ASSERT(probe != NULL);
+			ndx = DTRACE_HASHSTR(hash, probe) & new_mask;
+
+			next = bucket->dthb_next;
+			bucket->dthb_next = new_tab[ndx];
+			new_tab[ndx] = bucket;
+		}
+	}
+
+	free(hash->dth_tab);
+	hash->dth_tab = new_tab;
+	hash->dth_size = new_size;
+	hash->dth_mask = new_mask;
+}
+
+static void
+dtrace_hash_add(dtrace_hash_t *hash, dtrace_probe_t *new)
+{
+	int hashval = DTRACE_HASHSTR(hash, new);
+	int ndx = hashval & hash->dth_mask;
+	dtrace_hashbucket_t *bucket = hash->dth_tab[ndx];
+	dtrace_probe_t **nextp, **prevp;
+
+	for (; bucket != NULL; bucket = bucket->dthb_next) {
+		if (DTRACE_HASHEQ(hash, bucket->dthb_chain, new))
+			goto add;
+	}
+
+	if ((hash->dth_nbuckets >> 1) > hash->dth_size) {
+		dtrace_hash_resize(hash);
+		dtrace_hash_add(hash, new);
+		return;
+	}
+
+	bucket = calloc(1, sizeof (dtrace_hashbucket_t));
+	bucket->dthb_next = hash->dth_tab[ndx];
+	hash->dth_tab[ndx] = bucket;
+	hash->dth_nbuckets++;
+
+add:
+	nextp = DTRACE_HASHNEXT(hash, new);
+	ASSERT(*nextp == NULL && *(DTRACE_HASHPREV(hash, new)) == NULL);
+	*nextp = bucket->dthb_chain;
+
+	if (bucket->dthb_chain != NULL) {
+		prevp = DTRACE_HASHPREV(hash, bucket->dthb_chain);
+		ASSERT(*prevp == NULL);
+		*prevp = new;
+	}
+
+	bucket->dthb_chain = new;
+	bucket->dthb_len++;
+}
+
+static dtrace_probe_t *
+dtrace_hash_lookup(dtrace_hash_t *hash, dtrace_probe_t *template)
+{
+	int hashval = DTRACE_HASHSTR(hash, template);
+	int ndx = hashval & hash->dth_mask;
+	dtrace_hashbucket_t *bucket = hash->dth_tab[ndx];
+
+	for (; bucket != NULL; bucket = bucket->dthb_next) {
+		if (DTRACE_HASHEQ(hash, bucket->dthb_chain, template))
+			return (bucket->dthb_chain);
+	}
+
+	return (NULL);
+}
+
+static int
+dtrace_hash_collisions(dtrace_hash_t *hash, dtrace_probe_t *template)
+{
+	int hashval = DTRACE_HASHSTR(hash, template);
+	int ndx = hashval & hash->dth_mask;
+	dtrace_hashbucket_t *bucket = hash->dth_tab[ndx];
+
+	for (; bucket != NULL; bucket = bucket->dthb_next) {
+		if (DTRACE_HASHEQ(hash, bucket->dthb_chain, template))
+			return (bucket->dthb_len);
+	}
+
+	return (0);
+}
+
+static void
+dtrace_hash_remove(dtrace_hash_t *hash, dtrace_probe_t *probe)
+{
+	int ndx = DTRACE_HASHSTR(hash, probe) & hash->dth_mask;
+	dtrace_hashbucket_t *bucket = hash->dth_tab[ndx];
+
+	dtrace_probe_t **prevp = DTRACE_HASHPREV(hash, probe);
+	dtrace_probe_t **nextp = DTRACE_HASHNEXT(hash, probe);
+
+	/*
+	 * Find the bucket that we're removing this probe from.
+	 */
+	for (; bucket != NULL; bucket = bucket->dthb_next) {
+		if (DTRACE_HASHEQ(hash, bucket->dthb_chain, probe))
+			break;
+	}
+
+	ASSERT(bucket != NULL);
+
+	if (*prevp == NULL) {
+		if (*nextp == NULL) {
+			/*
+			 * The removed probe was the only probe on this
+			 * bucket; we need to remove the bucket.
+			 */
+			dtrace_hashbucket_t *b = hash->dth_tab[ndx];
+
+			ASSERT(bucket->dthb_chain == probe);
+			ASSERT(b != NULL);
+
+			if (b == bucket) {
+				hash->dth_tab[ndx] = bucket->dthb_next;
+			} else {
+				while (b->dthb_next != bucket)
+					b = b->dthb_next;
+				b->dthb_next = bucket->dthb_next;
+			}
+
+			ASSERT(hash->dth_nbuckets > 0);
+			hash->dth_nbuckets--;
+			free(bucket);
+			return;
+		}
+
+		bucket->dthb_chain = *nextp;
+	} else {
+		*(DTRACE_HASHNEXT(hash, *prevp)) = *nextp;
+	}
+
+	if (*nextp != NULL)
+		*(DTRACE_HASHPREV(hash, *nextp)) = *prevp;
+}
+
 static void
 dtrace_difo_destroy(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 {
@@ -2792,13 +3010,6 @@ dtrace_unregister(dtrace_provider_id_t id)
 		}
 	}
 
-	/*
-	 * The provider's probes have been removed from the hash chains and
-	 * from the probe array.  Now issue a dtrace_sync() to be sure that
-	 * everyone has cleared out from any probe array processing.
-	 */
-	dtrace_sync();
-
 	for (probe = first; probe != NULL; probe = first) {
 		first = probe->dtpr_nextmod;
 
@@ -2830,6 +3041,256 @@ dtrace_unregister(dtrace_provider_id_t id)
 	free(old);
 
 	return (0);
+}
+
+/*
+ * DTrace Probe Management Functions
+ *
+ * The functions in this section perform the DTrace probe management,
+ * including functions to create probes, look-up probes, and call into the
+ * providers to request that probes be provided.  Some of these functions are
+ * in the Provider-to-Framework API; these functions can be identified by the
+ * fact that they are not declared "static".
+ */
+
+/*
+ * Create a probe with the specified module name, function name, and name.
+ */
+dtrace_id_t
+dtrace_probe_create(dtrace_provider_id_t prov, const char *mod,
+    const char *func, const char *name, int aframes, void *arg)
+{
+	dtrace_probe_t *probe, **probes;
+	dtrace_provider_t *provider = (dtrace_provider_t *)prov;
+	dtrace_id_t id;
+
+	id = alloc_unr(dtrace_arena);
+	probe = calloc(1, sizeof (dtrace_probe_t));
+	assert(probe != NULL);
+
+	probe->dtpr_id = id;
+	probe->dtpr_gen = dtrace_probegen++;
+	probe->dtpr_mod = strdup(mod);
+	probe->dtpr_func = strdup(func);
+	probe->dtpr_name = strdup(name);
+	probe->dtpr_arg = arg;
+	probe->dtpr_aframes = aframes;
+	probe->dtpr_provider = provider;
+
+	dtrace_hash_add(dtrace_bymod, probe);
+	dtrace_hash_add(dtrace_byfunc, probe);
+	dtrace_hash_add(dtrace_byname, probe);
+
+	if (id - 1 >= dtrace_nprobes) {
+		size_t osize = dtrace_nprobes * sizeof (dtrace_probe_t *);
+		size_t nsize = osize << 1;
+
+		if (nsize == 0) {
+			ASSERT(osize == 0);
+			ASSERT(dtrace_probes == NULL);
+			nsize = sizeof (dtrace_probe_t *);
+		}
+
+		probes = calloc(1, nsize);
+		assert(probes != NULL);
+
+		if (dtrace_probes == NULL) {
+			ASSERT(osize == 0);
+			dtrace_probes = probes;
+			dtrace_nprobes = 1;
+		} else {
+			dtrace_probe_t **oprobes = dtrace_probes;
+
+			bcopy(oprobes, probes, osize);
+			dtrace_membar_producer();
+			dtrace_probes = probes;
+
+			free(oprobes);
+			dtrace_nprobes <<= 1;
+		}
+
+		ASSERT(id - 1 < dtrace_nprobes);
+	}
+
+	ASSERT(dtrace_probes[id - 1] == NULL);
+	dtrace_probes[id - 1] = probe;
+
+	return (id);
+}
+
+static dtrace_probe_t *
+dtrace_probe_lookup_id(dtrace_id_t id)
+{
+	if (id == 0 || id > dtrace_nprobes)
+		return (NULL);
+
+	return (dtrace_probes[id - 1]);
+}
+
+static int
+dtrace_probe_lookup_match(dtrace_probe_t *probe, void *arg)
+{
+	*((dtrace_id_t *)arg) = probe->dtpr_id;
+
+	return (DTRACE_MATCH_DONE);
+}
+
+/*
+ * Look up a probe based on provider and one or more of module name, function
+ * name and probe name.
+ */
+dtrace_id_t
+dtrace_probe_lookup(dtrace_provider_id_t prid, char *mod,
+    char *func, char *name)
+{
+	dtrace_probekey_t pkey;
+	dtrace_id_t id;
+	int match;
+
+	pkey.dtpk_prov = ((dtrace_provider_t *)prid)->dtpv_name;
+	pkey.dtpk_pmatch = &dtrace_match_string;
+	pkey.dtpk_mod = mod;
+	pkey.dtpk_mmatch = mod ? &dtrace_match_string : &dtrace_match_nul;
+	pkey.dtpk_func = func;
+	pkey.dtpk_fmatch = func ? &dtrace_match_string : &dtrace_match_nul;
+	pkey.dtpk_name = name;
+	pkey.dtpk_nmatch = name ? &dtrace_match_string : &dtrace_match_nul;
+	pkey.dtpk_id = DTRACE_IDNONE;
+
+	match = dtrace_match(&pkey, DTRACE_PRIV_ALL, 0, 0,
+	    dtrace_probe_lookup_match, &id);
+
+	ASSERT(match == 1 || match == 0);
+	return (match ? id : 0);
+}
+
+/*
+ * Returns the probe argument associated with the specified probe.
+ */
+void *
+dtrace_probe_arg(dtrace_provider_id_t id, dtrace_id_t pid)
+{
+	dtrace_probe_t *probe;
+	void *rval = NULL;
+
+	if ((probe = dtrace_probe_lookup_id(pid)) != NULL &&
+	    probe->dtpr_provider == (dtrace_provider_t *)id)
+		rval = probe->dtpr_arg;
+
+	return (rval);
+}
+
+/*
+ * Copy a probe into a probe description.
+ */
+static void
+dtrace_probe_description(const dtrace_probe_t *prp, dtrace_probedesc_t *pdp)
+{
+	bzero(pdp, sizeof (dtrace_probedesc_t));
+	pdp->dtpd_id = prp->dtpr_id;
+
+	(void) strncpy(pdp->dtpd_provider,
+	    prp->dtpr_provider->dtpv_name, DTRACE_PROVNAMELEN - 1);
+
+	(void) strncpy(pdp->dtpd_mod, prp->dtpr_mod, DTRACE_MODNAMELEN - 1);
+	(void) strncpy(pdp->dtpd_func, prp->dtpr_func, DTRACE_FUNCNAMELEN - 1);
+	(void) strncpy(pdp->dtpd_name, prp->dtpr_name, DTRACE_NAMELEN - 1);
+}
+
+/*
+ * Called to indicate that a probe -- or probes -- should be provided by a
+ * specfied provider.  If the specified description is NULL, the provider will
+ * be told to provide all of its probes.  (This is done whenever a new
+ * consumer comes along, or whenever a retained enabling is to be matched.) If
+ * the specified description is non-NULL, the provider is given the
+ * opportunity to dynamically provide the specified probe, allowing providers
+ * to support the creation of probes on-the-fly.  (So-called _autocreated_
+ * probes.)  If the provider is NULL, the operations will be applied to all
+ * providers; if the provider is non-NULL the operations will only be applied
+ * to the specified provider.  The dtrace_provider_lock must be held, and the
+ * dtrace_lock must _not_ be held -- the provider's dtps_provide() operation
+ * will need to grab the dtrace_lock when it reenters the framework through
+ * dtrace_probe_lookup(), dtrace_probe_create(), etc.
+ */
+static void
+dtrace_probe_provide(dtrace_probedesc_t *desc, dtrace_provider_t *prv)
+{
+	int all = 0;
+
+	if (prv == NULL) {
+		all = 1;
+		prv = dtrace_provider;
+	}
+
+	do {
+		/*
+		 * First, call the blanket provide operation.
+		 */
+		prv->dtpv_pops.dtps_provide(prv->dtpv_arg, desc);
+	} while (all && (prv = prv->dtpv_next) != NULL);
+}
+
+#ifdef illumos
+/*
+ * Iterate over each probe, and call the Framework-to-Provider API function
+ * denoted by offs.
+ */
+static void
+dtrace_probe_foreach(uintptr_t offs)
+{
+	dtrace_provider_t *prov;
+	void (*func)(void *, dtrace_id_t, void *);
+	dtrace_probe_t *probe;
+	dtrace_icookie_t cookie;
+	int i;
+
+	for (i = 0; i < dtrace_nprobes; i++) {
+		if ((probe = dtrace_probes[i]) == NULL)
+			continue;
+
+		if (probe->dtpr_ecb == NULL) {
+			/*
+			 * This probe isn't enabled -- don't call the function.
+			 */
+			continue;
+		}
+
+		prov = probe->dtpr_provider;
+		func = *((void(**)(void *, dtrace_id_t, void *))
+		    ((uintptr_t)&prov->dtpv_pops + offs));
+
+		func(prov->dtpv_arg, i + 1, probe->dtpr_arg);
+	}
+
+	dtrace_interrupt_enable(cookie);
+}
+#endif
+
+static int
+dtrace_probe_enable(dtrace_probedesc_t *desc, dtrace_enabling_t *enab)
+{
+	dtrace_probekey_t pkey;
+	uint32_t priv;
+	uid_t uid;
+	zoneid_t zoneid;
+
+	dtrace_ecb_create_cache = NULL;
+
+	if (desc == NULL) {
+		/*
+		 * If we're passed a NULL description, we're being asked to
+		 * create an ECB with a NULL probe.
+		 */
+		(void) dtrace_ecb_create_enable(NULL, enab);
+		return (0);
+	}
+
+	dtrace_probekey(desc, &pkey);
+	dtrace_cred2priv(enab->dten_vstate->dtvs_state->dts_cred.dcr_cred,
+	    &priv, &uid, &zoneid);
+
+	return (dtrace_match(&pkey, priv, uid, zoneid, dtrace_ecb_create_enable,
+	    enab));
 }
 
 int
