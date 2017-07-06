@@ -65,6 +65,7 @@ static dtrace_probe_t	**dtrace_probes;	/* array of all probes */
 static int		dtrace_nprobes;		/* number of probes */
 static int		dtrace_nprovs;		/* number of providers */
 static struct unrhdr	*dtrace_arena;		/* Probe ID number.     */
+static struct mtx	dtrace_unr_mtx;
 
 static size_t dtrace_strlen(const char *, size_t);
 static dtrace_probe_t *dtrace_probe_lookup_id(dtrace_id_t id);
@@ -3444,11 +3445,7 @@ dtrace_init(void)
 	dtrace_provider_id_t id;
 	int err;
 
-	err = dtrace_register("dtrace", &dtrace_provider_attr,
-	    DTRACE_PRIV_NONE, 0, &dtrace_provider_ops, NULL, &id);
-	if (err)
-		goto end;
-	dtrace_provider = (dtrace_provider_t *) id;
+	dtrace_arena = new_unrhdr(1, INT_MAX, &dtrace_unr_mtx);
 
 	dtrace_bymod = dtrace_hash_create(offsetof(dtrace_probe_t, dtpr_mod),
 	    offsetof(dtrace_probe_t, dtpr_nextmod),
@@ -3462,7 +3459,11 @@ dtrace_init(void)
 	    offsetof(dtrace_probe_t, dtpr_nextname),
 	    offsetof(dtrace_probe_t, dtpr_prevname));
 
-end:
+	err = dtrace_register("dtrace", &dtrace_provider_attr,
+	    DTRACE_PRIV_NONE, 0, &dtrace_provider_ops, NULL, &id);
+
+	dtrace_provider = (dtrace_provider_t *) id;
+
 	return (err);
 }
 

@@ -30,10 +30,7 @@ _Malloc(size_t foo, int line)
 
 struct unrhdr;
 
-
-struct mtx {
-	int	state;
-} unitmtx;
+static struct mtx unitmtx;
 
 static void
 mtx_lock(struct mtx *mp)
