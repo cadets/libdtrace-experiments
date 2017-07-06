@@ -115,6 +115,12 @@ START_TEST(test_dtrace_register)
 }
 END_TEST
 
+/*
+ * TODO: Should make some probe_lookup() tests here in order to ensure that they
+ * are correct, so that we can use them in tests with respect to probe
+ * creation/deletion...
+ */
+
 START_TEST(test_dtrace_probe_create)
 {
 	dtrace_id_t probeid;
