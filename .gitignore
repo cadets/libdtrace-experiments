@@ -9,3 +9,5 @@
 *.debug
 libdtrace-core-tests/libdtrace-core-tests
 *.core
+test-output
+test-output.xml

@@ -213,6 +213,7 @@ main(void)
 	dt_suite = create_dtrace_suite();
 	dt_sr = srunner_create(dt_suite);
 
+	srunner_set_tap(dt_sr, "test-output");
 	srunner_run_all(dt_sr, CK_VERBOSE);
 	n_failed = srunner_ntests_failed(dt_sr);
 
