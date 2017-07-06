@@ -2408,6 +2408,87 @@ dtrace_ecb_create(dtrace_state_t *state, dtrace_probe_t *probe,
 	return (dtrace_ecb_create_cache = ecb);
 }
 
+/*
+ * DTrace Matching Functions
+ *
+ * These functions are used to match groups of probes, given some elements of
+ * a probe tuple, or some globbed expressions for elements of a probe tuple.
+ */
+static int
+dtrace_match_priv(const dtrace_probe_t *prp, uint32_t priv, uid_t uid,
+    zoneid_t zoneid)
+{
+	if (priv != DTRACE_PRIV_ALL) {
+		uint32_t ppriv = prp->dtpr_provider->dtpv_priv.dtpp_flags;
+		uint32_t match = priv & ppriv;
+
+		/*
+		 * No PRIV_DTRACE_* privileges...
+		 */
+		if ((priv & (DTRACE_PRIV_PROC | DTRACE_PRIV_USER |
+		    DTRACE_PRIV_KERNEL)) == 0)
+			return (0);
+
+		/*
+		 * No matching bits, but there were bits to match...
+		 */
+		if (match == 0 && ppriv != 0)
+			return (0);
+
+		/*
+		 * Need to have permissions to the process, but don't...
+		 */
+		if (((ppriv & ~match) & DTRACE_PRIV_OWNER) != 0 &&
+		    uid != prp->dtpr_provider->dtpv_priv.dtpp_uid) {
+			return (0);
+		}
+
+		/*
+		 * Need to be in the same zone unless we possess the
+		 * privilege to examine all zones.
+		 */
+		if (((ppriv & ~match) & DTRACE_PRIV_ZONEOWNER) != 0 &&
+		    zoneid != prp->dtpr_provider->dtpv_priv.dtpp_zoneid) {
+			return (0);
+		}
+	}
+
+	return (1);
+}
+
+/*
+ * dtrace_match_probe compares a dtrace_probe_t to a pre-compiled key, which
+ * consists of input pattern strings and an ops-vector to evaluate them.
+ * This function returns >0 for match, 0 for no match, and <0 for error.
+ */
+static int
+dtrace_match_probe(const dtrace_probe_t *prp, const dtrace_probekey_t *pkp,
+    uint32_t priv, uid_t uid, zoneid_t zoneid)
+{
+	dtrace_provider_t *pvp = prp->dtpr_provider;
+	int rv;
+
+	if (pvp->dtpv_defunct)
+		return (0);
+
+	if ((rv = pkp->dtpk_pmatch(pvp->dtpv_name, pkp->dtpk_prov, 0)) <= 0)
+		return (rv);
+
+	if ((rv = pkp->dtpk_mmatch(prp->dtpr_mod, pkp->dtpk_mod, 0)) <= 0)
+		return (rv);
+
+	if ((rv = pkp->dtpk_fmatch(prp->dtpr_func, pkp->dtpk_func, 0)) <= 0)
+		return (rv);
+
+	if ((rv = pkp->dtpk_nmatch(prp->dtpr_name, pkp->dtpk_name, 0)) <= 0)
+		return (rv);
+
+	if (dtrace_match_priv(prp, priv, uid, zoneid) == 0)
+		return (0);
+
+	return (rv);
+}
+
 static int
 dtrace_match_glob(const char *s, const char *p, int depth)
 {
