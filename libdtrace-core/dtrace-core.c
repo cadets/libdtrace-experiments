@@ -25,6 +25,26 @@
 #define	DT_MASK_LO 0x00000000FFFFFFFFULL
 #define	P2ROUNDUP(x, align)		(-(-(x) & -(align)))
 #define	P2PHASEUP(x, align, phase)	((phase) - (((phase) - (x)) & -(align)))
+/*
+ * DTrace Macros and Constants
+ *
+ * These are various macros that are useful in various spots in the
+ * implementation, along with a few random constants that have no meaning
+ * outside of the implementation.  There is no real structure to this cpp
+ * mishmash -- but is there ever?
+ */
+#define	DTRACE_HASHSTR(hash, probe)	\
+	dtrace_hash_str(*((char **)((uintptr_t)(probe) + (hash)->dth_stroffs)))
+
+#define	DTRACE_HASHNEXT(hash, probe)	\
+	(dtrace_probe_t **)((uintptr_t)(probe) + (hash)->dth_nextoffs)
+
+#define	DTRACE_HASHPREV(hash, probe)	\
+	(dtrace_probe_t **)((uintptr_t)(probe) + (hash)->dth_prevoffs)
+
+#define	DTRACE_HASHEQ(hash, lhs, rhs)	\
+	(strcmp(*((char **)((uintptr_t)(lhs) + (hash)->dth_stroffs)), \
+	    *((char **)((uintptr_t)(rhs) + (hash)->dth_stroffs))) == 0)
 
 #define ASSERT3U(...) (0)
 
