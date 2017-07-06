@@ -185,10 +185,7 @@ dtrace_hash_create(uintptr_t stroffs, uintptr_t nextoffs, uintptr_t prevoffs)
 	hash->dth_mask = hash->dth_size - 1;
 
 	hash->dth_tab = calloc(hash->dth_size, sizeof (dtrace_hashbucket_t *));
-	if (hash->dth_tab) {
-		free(hash);
-		hash = NULL;
-	}
+	assert(hash->dth_tab != NULL);
 
 	return (hash);
 }
