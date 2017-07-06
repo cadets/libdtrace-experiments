@@ -33,7 +33,7 @@
 #define	_SYS_DTRACE_H
 
 #ifdef	__cplusplus
-extern "C" {
+"C" {
 #endif
 
 /*
@@ -1973,17 +1973,17 @@ typedef struct dtrace_pops {
 
 typedef uintptr_t	dtrace_provider_id_t;
 
-extern int dtrace_register(const char *, const dtrace_pattr_t *, uint32_t,
+int dtrace_register(const char *, const dtrace_pattr_t *, uint32_t,
     cred_t *, const dtrace_pops_t *, void *, dtrace_provider_id_t *);
-extern int dtrace_unregister(dtrace_provider_id_t);
-extern int dtrace_condense(dtrace_provider_id_t);
-extern void dtrace_invalidate(dtrace_provider_id_t);
-extern dtrace_id_t dtrace_probe_lookup(dtrace_provider_id_t, char *,
+int dtrace_unregister(dtrace_provider_id_t);
+int dtrace_condense(dtrace_provider_id_t);
+void dtrace_invalidate(dtrace_provider_id_t);
+dtrace_id_t dtrace_probe_lookup(dtrace_provider_id_t, char *,
     char *, char *);
-extern dtrace_id_t dtrace_probe_create(dtrace_provider_id_t, const char *,
+dtrace_id_t dtrace_probe_create(dtrace_provider_id_t, const char *,
     const char *, const char *, int, void *);
-extern void *dtrace_probe_arg(dtrace_provider_id_t, dtrace_id_t);
-extern void dtrace_probe(dtrace_id_t, uintptr_t arg0, uintptr_t arg1,
+void *dtrace_probe_arg(dtrace_provider_id_t, dtrace_id_t);
+void dtrace_probe(dtrace_id_t, uintptr_t arg0, uintptr_t arg1,
     uintptr_t arg2, uintptr_t arg3, uintptr_t arg4);
 
 /*
@@ -2138,9 +2138,9 @@ typedef struct dtrace_mops {
 
 typedef uintptr_t	dtrace_meta_provider_id_t;
 
-extern int dtrace_meta_register(const char *, const dtrace_mops_t *, void *,
+int dtrace_meta_register(const char *, const dtrace_mops_t *, void *,
     dtrace_meta_provider_id_t *);
-extern int dtrace_meta_unregister(dtrace_meta_provider_id_t);
+int dtrace_meta_unregister(dtrace_meta_provider_id_t);
 
 /*
  * DTrace Kernel Hooks
@@ -2159,52 +2159,52 @@ typedef enum dtrace_vtime_state {
 } dtrace_vtime_state_t;
 
 #ifdef illumos
-extern dtrace_vtime_state_t dtrace_vtime_active;
+dtrace_vtime_state_t dtrace_vtime_active;
 #endif
 #if 0
-extern void dtrace_vtime_switch(kthread_t *next);
-extern void dtrace_vtime_enable_tnf(void);
-extern void dtrace_vtime_disable_tnf(void);
-extern void dtrace_vtime_enable(void);
-extern void dtrace_vtime_disable(void);
+void dtrace_vtime_switch(kthread_t *next);
+void dtrace_vtime_enable_tnf(void);
+void dtrace_vtime_disable_tnf(void);
+void dtrace_vtime_enable(void);
+void dtrace_vtime_disable(void);
 #endif
 
 struct regs;
 struct reg;
 
 #ifdef illumos
-extern int (*dtrace_pid_probe_ptr)(struct reg *);
-extern int (*dtrace_return_probe_ptr)(struct reg *);
-extern void (*dtrace_fasttrap_fork_ptr)(proc_t *, proc_t *);
-extern void (*dtrace_fasttrap_exec_ptr)(proc_t *);
-extern void (*dtrace_fasttrap_exit_ptr)(proc_t *);
-extern void dtrace_fasttrap_fork(proc_t *, proc_t *);
+int (*dtrace_pid_probe_ptr)(struct reg *);
+int (*dtrace_return_probe_ptr)(struct reg *);
+void (*dtrace_fasttrap_fork_ptr)(proc_t *, proc_t *);
+void (*dtrace_fasttrap_exec_ptr)(proc_t *);
+void (*dtrace_fasttrap_exit_ptr)(proc_t *);
+void dtrace_fasttrap_fork(proc_t *, proc_t *);
 #endif
 
 typedef uintptr_t dtrace_icookie_t;
 typedef void (*dtrace_xcall_t)(void *);
 
-extern dtrace_icookie_t dtrace_interrupt_disable(void);
-extern void dtrace_interrupt_enable(dtrace_icookie_t);
+dtrace_icookie_t dtrace_interrupt_disable(void);
+void dtrace_interrupt_enable(dtrace_icookie_t);
 
-extern void dtrace_membar_producer(void);
-extern void dtrace_membar_consumer(void);
+void dtrace_membar_producer(void);
+void dtrace_membar_consumer(void);
 
 #if 0
-extern void (*dtrace_cpu_init)(processorid_t);
-extern void (*dtrace_helpers_cleanup)(void);
-extern void (*dtrace_helpers_fork)(proc_t *parent, proc_t *child);
-extern void (*dtrace_cpustart_init)(void);
-extern void (*dtrace_cpustart_fini)(void);
-extern void (*dtrace_closef)(void);
+void (*dtrace_cpu_init)(processorid_t);
+void (*dtrace_helpers_cleanup)(void);
+void (*dtrace_helpers_fork)(proc_t *parent, proc_t *child);
+void (*dtrace_cpustart_init)(void);
+void (*dtrace_cpustart_fini)(void);
+void (*dtrace_closef)(void);
 #endif
 
-extern void (*dtrace_debugger_init)(void);
-extern void (*dtrace_debugger_fini)(void);
-extern dtrace_cacheid_t dtrace_predcache_id;
+void (*dtrace_debugger_init)(void);
+void (*dtrace_debugger_fini)(void);
+dtrace_cacheid_t dtrace_predcache_id;
 
 #ifdef illumos
-extern hrtime_t dtrace_gethrtime(void);
+hrtime_t dtrace_gethrtime(void);
 #else
 void dtrace_debug_printf(const char *, ...) __printflike(1, 2);
 #endif
@@ -2213,36 +2213,38 @@ void dtrace_debug_printf(const char *, ...) __printflike(1, 2);
  * XXX: This is likely not even necessary. We are not running on SMP at this
  * point, so synchronizing CPUs is likely not even relevant.
  */
-extern void dtrace_sync(void);
-extern void dtrace_toxic_ranges(void (*)(uintptr_t, uintptr_t));
-extern void dtrace_xcall(processorid_t, dtrace_xcall_t, void *);
-extern void dtrace_vpanic(const char *, __va_list);
-extern void dtrace_panic(const char *, ...);
+void dtrace_sync(void);
+void dtrace_toxic_ranges(void (*)(uintptr_t, uintptr_t));
+void dtrace_xcall(processorid_t, dtrace_xcall_t, void *);
+void dtrace_vpanic(const char *, __va_list);
+void dtrace_panic(const char *, ...);
 #endif
 
-extern int dtrace_safe_defer_signal(void);
-extern void dtrace_safe_synchronous_signal(void);
+int dtrace_safe_defer_signal(void);
+void dtrace_safe_synchronous_signal(void);
 
-extern int dtrace_mach_aframes(void);
+int dtrace_mach_aframes(void);
 
 #if defined(__i386) || defined(__amd64)
-extern int dtrace_instr_size(uchar_t *instr);
-extern int dtrace_instr_size_isa(uchar_t *, model_t, int *);
-extern void dtrace_invop_callsite(void);
+int dtrace_instr_size(uchar_t *instr);
+int dtrace_instr_size_isa(uchar_t *, model_t, int *);
+void dtrace_invop_callsite(void);
 #endif
-extern void dtrace_invop_add(int (*)(uintptr_t, struct trapframe *, uintptr_t));
-extern void dtrace_invop_remove(int (*)(uintptr_t, struct trapframe *,
+void dtrace_invop_add(int (*)(uintptr_t, struct trapframe *, uintptr_t));
+void dtrace_invop_remove(int (*)(uintptr_t, struct trapframe *,
     uintptr_t));
 
 #ifdef __sparc
-extern int dtrace_blksuword32(uintptr_t, uint32_t *, int);
-extern void dtrace_getfsr(uint64_t *);
+int dtrace_blksuword32(uintptr_t, uint32_t *, int);
+void dtrace_getfsr(uint64_t *);
 #endif
+
+int dtrace_init(void);
 
 #ifndef illumos
 #if 0
-extern void dtrace_helpers_duplicate(proc_t *, proc_t *);
-extern void dtrace_helpers_destroy(proc_t *);
+void dtrace_helpers_duplicate(proc_t *, proc_t *);
+void dtrace_helpers_destroy(proc_t *);
 #endif
 #endif
 

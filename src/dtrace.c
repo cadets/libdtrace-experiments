@@ -2528,6 +2528,14 @@ static dtrace_pops_t	dtrace_provider_ops = {
 	(void (*)(void *, dtrace_id_t, void *))dtrace_nullop
 };
 
+static dtrace_pattr_t	dtrace_provider_attr = {
+{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
+{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
+{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
+{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
+{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
+};
+
 int
 dtrace_register(const char *name, const dtrace_pattr_t *pap, uint32_t priv,
     cred_t *cr, const dtrace_pops_t *pops, void *arg, dtrace_provider_id_t *idp)
@@ -2686,4 +2694,16 @@ dtrace_predicate_create(dtrace_difo_t *dp)
 	pred->dtp_cacheid = dtrace_predcache_id++;
 
 	return (pred);
+}
+
+int
+dtrace_init(void)
+{
+	dtrace_provider_id_t id;
+	int err;
+
+	err = dtrace_register("dtrace", &dtrace_provider_attr,
+	    DTRACE_PRIV_NONE, 0, &dtrace_provider_ops, NULL, &id);
+
+	return (err);
 }

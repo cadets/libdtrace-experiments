@@ -1,9 +1,3 @@
-LIB=		dtrace
-SHLIB_MAJOR=	0
+SUBDIR=	src tests
 
-SRCS=		dtrace.c
-CFLAGS+=	-D_WANT_UCRED -D_WANT_FILE
-
-MAN=
-
-.include <bsd.lib.mk>
+.include <bsd.subdir.mk>
