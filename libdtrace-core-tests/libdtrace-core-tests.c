@@ -30,7 +30,7 @@ START_TEST(test_dtrace_deinit)
 
 	err = dtrace_init();
 	if (err != 0)
-		ck_abort_msg("DTrace not properly initialized");
+		ck_abort_msg("DTrace not properly initialized: %s", strerror(err));
 
 	err = dtrace_deinit();
 
@@ -49,7 +49,7 @@ START_TEST(test_dtrace_providers)
 
 	err = dtrace_init();
 	if (err != 0)
-		ck_abort_msg("DTrace not properly initialized");
+		ck_abort_msg("DTrace not properly initialized: %s", strerror(err));
 
 	provs = dtrace_providers(&sz);
 
@@ -58,7 +58,7 @@ START_TEST(test_dtrace_providers)
 
 	err = dtrace_deinit();
 	if (err != 0)
-		ck_abort_msg("DTrace not properly deinitialized");
+		ck_abort_msg("DTrace not properly deinitialized: %s", strerror(err));
 }
 END_TEST
 
@@ -75,9 +75,9 @@ START_TEST(test_dtrace_register)
 		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
 		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
 		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-		NULL,
-		NULL,
-		NULL,
+		(void (*)(void *, dtrace_id_t, void *, dtrace_argdesc_t *))dtrace_nullop,
+		(uint64_t (*)(void *, dtrace_id_t, void *, int, int))dtrace_nullop,
+		(int (*)(void *, dtrace_id_t, void *))dtrace_nullop,
 		(void (*)(void *, dtrace_id_t, void *))dtrace_nullop
 	};
 
@@ -94,20 +94,23 @@ START_TEST(test_dtrace_register)
 
 	err = dtrace_init();
 	if (err)
-		ck_abort_msg("DTrace not properly initialized");
+		ck_abort_msg("DTrace not properly initialized", strerror(err));
 
-	err = dtrace_register("test provider", &test_provider_attr,
+	err = dtrace_register("test_provider", &test_provider_attr,
 	    DTRACE_PRIV_NONE, 0, &test_provider_ops, NULL, &id);
 	ck_assert_int_eq(err, 0);
 
 	provs = (char (*)[DTRACE_PROVNAMELEN]) dtrace_providers(&sz);
 	ck_assert_int_eq(sz, 2);
 	ck_assert_str_eq("dtrace", provs[0]);
-	ck_assert_str_eq("test provider", provs[1]);
+	ck_assert_str_eq("test_provider", provs[1]);
+
+	err = dtrace_unregister(id);
+	ck_assert_int_eq(err, 0);
 
 	err = dtrace_deinit();
 	if (err)
-		ck_abort_msg("DTrace not properly deinitialized");
+		ck_abort_msg("DTrace not properly deinitialized: %s", strerror(err));
 }
 END_TEST
 
@@ -151,7 +154,7 @@ main(void)
 	dt_suite = create_dtrace_suite();
 	dt_sr = srunner_create(dt_suite);
 
-	srunner_run_all(dt_sr, CK_NORMAL);
+	srunner_run_all(dt_sr, CK_VERBOSE);
 	n_failed = srunner_ntests_failed(dt_sr);
 
 	srunner_free(dt_sr);

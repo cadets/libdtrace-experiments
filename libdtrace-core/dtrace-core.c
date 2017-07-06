@@ -3504,8 +3504,11 @@ dtrace_init(void)
 int
 dtrace_deinit(void)
 {
-	int err;
+	/*
+	 * XXX: Should we unregister everything here through deinit?
+	 */
 
+	int err;
 	err = dtrace_unregister((dtrace_provider_id_t) dtrace_provider);
 	return (err);
 }
