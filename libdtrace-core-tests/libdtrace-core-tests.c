@@ -115,12 +115,6 @@ START_TEST(test_dtrace_register)
 }
 END_TEST
 
-/*
- * TODO: Should make some probe_lookup() tests here in order to ensure that they
- * are correct, so that we can use them in tests with respect to probe
- * creation/deletion...
- */
-
 START_TEST(test_dtrace_probe_create)
 {
 	dtrace_id_t probeid;
@@ -150,6 +144,43 @@ START_TEST(test_dtrace_probe_create)
 }
 END_TEST
 
+/*
+ * TODO: Should make some probe_lookup() tests here in order to ensure that they
+ * are correct, so that we can use them in tests with respect to probe
+ * creation/deletion...
+ */
+
+START_TEST(test_dtrace_probe_lookup)
+{
+	dtrace_id_t probeid, lookupid;
+	dtrace_provider_id_t id;
+	int err;
+	/*
+	 * Test probe creation
+	 */
+
+	err = dtrace_init();
+	if (err)
+		ck_abort_msg("DTrace not properly initialized: %s", strerror(err));
+
+	err = dtrace_register("test_provider", &test_provider_attr,
+	    DTRACE_PRIV_NONE, 0, &test_provider_ops, NULL, &id);
+	ck_assert_int_eq(err, 0);
+
+	probeid = dtrace_probe_create(id, "test", "probe",
+	    "foo", 0, NULL);
+	lookupid = dtrace_probe_lookup(id, "test", "probe", "foo");
+	ck_assert_int_eq(probeid, lookupid);
+
+	err = dtrace_unregister(id);
+	ck_assert_int_eq(err, 0);
+
+	err = dtrace_deinit();
+	if (err)
+		ck_abort_msg("DTrace not properly deinitialized: %s", strerror(err));
+}
+END_TEST
+
 static Suite *
 create_dtrace_suite(void)
 {
@@ -165,6 +196,7 @@ create_dtrace_suite(void)
 	tcase_add_test(tc_core, test_dtrace_providers);
 	tcase_add_test(tc_core, test_dtrace_register);
 	tcase_add_test(tc_core, test_dtrace_probe_create);
+	tcase_add_test(tc_core, test_dtrace_probe_lookup);
 
 	suite_add_tcase(s, tc_core);
 
