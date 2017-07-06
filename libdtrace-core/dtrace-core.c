@@ -61,6 +61,7 @@ static dtrace_hash_t	*dtrace_byname;		/* probes hashed by name */
 static dtrace_probe_t	**dtrace_probes;	/* array of all probes */
 static int		dtrace_nprobes;		/* number of probes */
 static int		dtrace_nprovs;		/* number of providers */
+static struct unrhdr	*dtrace_arena;		/* Probe ID number.     */
 
 static size_t dtrace_strlen(const char *, size_t);
 static dtrace_probe_t *dtrace_probe_lookup_id(dtrace_id_t id);
@@ -160,7 +161,7 @@ dtrace_hash_create(uintptr_t stroffs, uintptr_t nextoffs, uintptr_t prevoffs)
 	hash->dth_size = 1;
 	hash->dth_mask = hash->dth_size - 1;
 
-	hash->dth_tab = calloc(hash->dth_size * sizeof (dtrace_hashbucket_t *));
+	hash->dth_tab = calloc(hash->dth_size, sizeof (dtrace_hashbucket_t *));
 	if (hash->dth_tab) {
 		free(hash);
 		hash = NULL;
@@ -2536,6 +2537,104 @@ dtrace_match_nonzero(const char *s, const char *p, int depth)
 	return (s != NULL && s[0] != '\0');
 }
 
+static int
+dtrace_match(const dtrace_probekey_t *pkp, uint32_t priv, uid_t uid,
+    zoneid_t zoneid, int (*matched)(dtrace_probe_t *, void *), void *arg)
+{
+	dtrace_probe_t template, *probe;
+	dtrace_hash_t *hash = NULL;
+	int len, best = INT_MAX, nmatched = 0;
+	dtrace_id_t i;
+
+	ASSERT(MUTEX_HELD(&dtrace_lock));
+
+	/*
+	 * If the probe ID is specified in the key, just lookup by ID and
+	 * invoke the match callback once if a matching probe is found.
+	 */
+	if (pkp->dtpk_id != DTRACE_IDNONE) {
+		if ((probe = dtrace_probe_lookup_id(pkp->dtpk_id)) != NULL &&
+		    dtrace_match_probe(probe, pkp, priv, uid, zoneid) > 0) {
+			(void) (*matched)(probe, arg);
+			nmatched++;
+		}
+		return (nmatched);
+	}
+
+	template.dtpr_mod = (char *)pkp->dtpk_mod;
+	template.dtpr_func = (char *)pkp->dtpk_func;
+	template.dtpr_name = (char *)pkp->dtpk_name;
+
+	/*
+	 * We want to find the most distinct of the module name, function
+	 * name, and name.  So for each one that is not a glob pattern or
+	 * empty string, we perform a lookup in the corresponding hash and
+	 * use the hash table with the fewest collisions to do our search.
+	 */
+	if (pkp->dtpk_mmatch == &dtrace_match_string &&
+	    (len = dtrace_hash_collisions(dtrace_bymod, &template)) < best) {
+		best = len;
+		hash = dtrace_bymod;
+	}
+
+	if (pkp->dtpk_fmatch == &dtrace_match_string &&
+	    (len = dtrace_hash_collisions(dtrace_byfunc, &template)) < best) {
+		best = len;
+		hash = dtrace_byfunc;
+	}
+
+	if (pkp->dtpk_nmatch == &dtrace_match_string &&
+	    (len = dtrace_hash_collisions(dtrace_byname, &template)) < best) {
+		best = len;
+		hash = dtrace_byname;
+	}
+
+	/*
+	 * If we did not select a hash table, iterate over every probe and
+	 * invoke our callback for each one that matches our input probe key.
+	 */
+	if (hash == NULL) {
+		for (i = 0; i < dtrace_nprobes; i++) {
+			if ((probe = dtrace_probes[i]) == NULL ||
+			    dtrace_match_probe(probe, pkp, priv, uid,
+			    zoneid) <= 0)
+				continue;
+
+			nmatched++;
+
+			if ((*matched)(probe, arg) != DTRACE_MATCH_NEXT)
+				break;
+		}
+
+		return (nmatched);
+	}
+
+	/*
+	 * If we selected a hash table, iterate over each probe of the same key
+	 * name and invoke the callback for every probe that matches the other
+	 * attributes of our input probe key.
+	 */
+	for (probe = dtrace_hash_lookup(hash, &template); probe != NULL;
+	    probe = *(DTRACE_HASHNEXT(hash, probe))) {
+
+		if (dtrace_match_probe(probe, pkp, priv, uid, zoneid) <= 0)
+			continue;
+
+		nmatched++;
+
+		if ((*matched)(probe, arg) != DTRACE_MATCH_NEXT)
+			break;
+	}
+
+	return (nmatched);
+}
+
+/*
+ * Return the function pointer dtrace_probecmp() should use to compare the
+ * specified pattern with a string.  For NULL or empty patterns, we select
+ * dtrace_match_nul().  For glob pattern strings, we use dtrace_match_glob().
+ * For non-empty non-glob strings, we use dtrace_match_string().
+ */
 static dtrace_probekey_f *
 dtrace_probekey_func(const char *p)
 {
@@ -2550,6 +2649,37 @@ dtrace_probekey_func(const char *p)
 	}
 
 	return (&dtrace_match_string);
+}
+
+/*
+ * Build a probe comparison key for use with dtrace_match_probe() from the
+ * given probe description.  By convention, a null key only matches anchored
+ * probes: if each field is the empty string, reset dtpk_fmatch to
+ * dtrace_match_nonzero().
+ */
+static void
+dtrace_probekey(dtrace_probedesc_t *pdp, dtrace_probekey_t *pkp)
+{
+	pkp->dtpk_prov = pdp->dtpd_provider;
+	pkp->dtpk_pmatch = dtrace_probekey_func(pdp->dtpd_provider);
+
+	pkp->dtpk_mod = pdp->dtpd_mod;
+	pkp->dtpk_mmatch = dtrace_probekey_func(pdp->dtpd_mod);
+
+	pkp->dtpk_func = pdp->dtpd_func;
+	pkp->dtpk_fmatch = dtrace_probekey_func(pdp->dtpd_func);
+
+	pkp->dtpk_name = pdp->dtpd_name;
+	pkp->dtpk_nmatch = dtrace_probekey_func(pdp->dtpd_name);
+
+	pkp->dtpk_id = pdp->dtpd_id;
+
+	if (pkp->dtpk_id == DTRACE_IDNONE &&
+	    pkp->dtpk_pmatch == &dtrace_match_nul &&
+	    pkp->dtpk_mmatch == &dtrace_match_nul &&
+	    pkp->dtpk_fmatch == &dtrace_match_nul &&
+	    pkp->dtpk_nmatch == &dtrace_match_nul)
+		pkp->dtpk_fmatch = &dtrace_match_nonzero;
 }
 
 static int
@@ -2575,91 +2705,6 @@ dtrace_ecb_create_enable(dtrace_probe_t *probe, void *arg)
 
 	dtrace_ecb_enable(ecb);
 	return (DTRACE_MATCH_NEXT);
-}
-
-static int
-dtrace_probe_enable(dtrace_probedesc_t *desc, dtrace_enabling_t *enab)
-{
-#if 0
-	dtrace_probekey_t pkey;
-	uint32_t priv;
-	uid_t uid;
-	zoneid_t zoneid;
-
-	dtrace_ecb_create_cache = NULL;
-
-	if (desc == NULL) {
-		/*
-		 * If we're passed a NULL description, we're being asked to
-		 * create an ECB with a NULL probe.
-		 */
-		(void) dtrace_ecb_create_enable(NULL, enab);
-		return (0);
-	}
-
-	dtrace_probekey(desc, &pkey);
-	dtrace_cred2priv(enab->dten_vstate->dtvs_state->dts_cred.dcr_cred,
-	    &priv, &uid, &zoneid);
-
-	return (dtrace_match(&pkey, priv, uid, zoneid, dtrace_ecb_create_enable,
-	    enab));
-#endif
-	return (0);
-}
-
-static void
-dtrace_probe_provide(dtrace_probedesc_t *desc, dtrace_provider_t *prv)
-{
-	int all = 0;
-
-	if (prv == NULL) {
-		all = 1;
-		prv = dtrace_provider;
-	}
-
-	do {
-		/*
-		 * First, call the blanket provide operation.
-		 */
-		prv->dtpv_pops.dtps_provide(prv->dtpv_arg, desc);
-	} while (all && (prv = prv->dtpv_next) != NULL);
-}
-
-static void
-dtrace_enabling_provide(dtrace_provider_t *prv)
-{
-	int i, all = 0;
-	dtrace_probedesc_t desc;
-	dtrace_genid_t gen;
-
-	if (prv == NULL) {
-		all = 1;
-		prv = dtrace_provider;
-	}
-
-	do {
-		dtrace_enabling_t *enab;
-		void *parg = prv->dtpv_arg;
-
-retry:
-		gen = dtrace_retained_gen;
-		for (enab = dtrace_retained; enab != NULL;
-		    enab = enab->dten_next) {
-			for (i = 0; i < enab->dten_ndesc; i++) {
-				desc = enab->dten_desc[i]->dted_probe;
-				prv->dtpv_pops.dtps_provide(parg, &desc);
-				/*
-				 * Process the retained enablings again if
-				 * they have changed while we weren't holding
-				 * dtrace_lock.
-				 */
-				if (gen != dtrace_retained_gen)
-					goto retry;
-			}
-		}
-	} while (all && (prv = prv->dtpv_next) != NULL);
-
-	dtrace_probe_provide(NULL, all ? NULL : prv);
 }
 
 static int
@@ -3249,6 +3294,44 @@ dtrace_probe_provide(dtrace_probedesc_t *desc, dtrace_provider_t *prv)
 		prv->dtpv_pops.dtps_provide(prv->dtpv_arg, desc);
 	} while (all && (prv = prv->dtpv_next) != NULL);
 }
+
+static void
+dtrace_enabling_provide(dtrace_provider_t *prv)
+{
+	int i, all = 0;
+	dtrace_probedesc_t desc;
+	dtrace_genid_t gen;
+
+	if (prv == NULL) {
+		all = 1;
+		prv = dtrace_provider;
+	}
+
+	do {
+		dtrace_enabling_t *enab;
+		void *parg = prv->dtpv_arg;
+
+retry:
+		gen = dtrace_retained_gen;
+		for (enab = dtrace_retained; enab != NULL;
+		    enab = enab->dten_next) {
+			for (i = 0; i < enab->dten_ndesc; i++) {
+				desc = enab->dten_desc[i]->dted_probe;
+				prv->dtpv_pops.dtps_provide(parg, &desc);
+				/*
+				 * Process the retained enablings again if
+				 * they have changed while we weren't holding
+				 * dtrace_lock.
+				 */
+				if (gen != dtrace_retained_gen)
+					goto retry;
+			}
+		}
+	} while (all && (prv = prv->dtpv_next) != NULL);
+
+	dtrace_probe_provide(NULL, all ? NULL : prv);
+}
+
 
 #ifdef illumos
 /*
