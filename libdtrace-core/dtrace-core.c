@@ -99,6 +99,26 @@ static void
 dtrace_nullop(void)
 {}
 
+static dtrace_pops_t	dtrace_provider_ops = {
+	(void (*)(void *, dtrace_probedesc_t *))dtrace_nullop,
+	(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+	(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+	(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+	(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
+	NULL,
+	NULL,
+	NULL,
+	(void (*)(void *, dtrace_id_t, void *))dtrace_nullop
+};
+
+static dtrace_pattr_t	dtrace_provider_attr = {
+{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
+{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
+{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
+{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
+{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
+};
+
 /*
  * XXX: This may or may not be needed (the kernel can provide this)
  */
@@ -2918,26 +2938,6 @@ dtrace_badname(const char *s)
 
 	return (0);
 }
-
-static dtrace_pops_t	dtrace_provider_ops = {
-	(void (*)(void *, dtrace_probedesc_t *))dtrace_nullop,
-	(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-	(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-	(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-	(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-	NULL,
-	NULL,
-	NULL,
-	(void (*)(void *, dtrace_id_t, void *))dtrace_nullop
-};
-
-static dtrace_pattr_t	dtrace_provider_attr = {
-{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
-{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
-{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
-{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
-{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
-};
 
 int
 dtrace_register(const char *name, const dtrace_pattr_t *pap, uint32_t priv,
