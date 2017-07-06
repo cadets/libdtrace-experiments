@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include <check.h>
 
 #include "../libdtrace-core/dtrace.h"
@@ -26,6 +28,27 @@ START_TEST(test_dtrace_deinit)
 }
 END_TEST
 
+START_TEST(test_dtrace_providers)
+{
+	char *provs;
+	size_t sz;
+	int err;
+
+	err = dtrace_init();
+	if (err != 0)
+		ck_abort_msg("DTrace not properly initialized");
+
+	provs = dtrace_providers(&sz);
+
+	ck_assert_int_eq(sz, 1);
+	ck_assert_str_eq(provs, "dtrace");
+
+	err = dtrace_deinit();
+	if (err != 0)
+		ck_abort_msg("DTrace not properly deinitialized");
+}
+END_TEST
+
 static Suite *
 create_dtrace_suite(void)
 {
@@ -38,6 +61,7 @@ create_dtrace_suite(void)
 
 	tcase_add_test(tc_core, test_dtrace_init);
 	tcase_add_test(tc_core, test_dtrace_deinit);
+	tcase_add_test(tc_core, test_dtrace_providers);
 	suite_add_tcase(s, tc_core);
 
 	return (s);

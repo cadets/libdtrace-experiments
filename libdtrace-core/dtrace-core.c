@@ -40,6 +40,7 @@ static dtrace_hash_t	*dtrace_byfunc;		/* probes hashed by function */
 static dtrace_hash_t	*dtrace_byname;		/* probes hashed by name */
 static dtrace_probe_t	**dtrace_probes;	/* array of all probes */
 static int		dtrace_nprobes;		/* number of probes */
+static int		dtrace_nprovs;		/* number of providers */
 
 static size_t dtrace_strlen(const char *, size_t);
 static dtrace_probe_t *dtrace_probe_lookup_id(dtrace_id_t id);
@@ -2621,6 +2622,7 @@ dtrace_register(const char *name, const dtrace_pattr_t *pap, uint32_t priv,
 
 	provider->dtpv_arg = arg;
 	*idp = (dtrace_provider_id_t)provider;
+	dtrace_nprovs++;
 
 	if (pops == &dtrace_provider_ops) {
 		ASSERT(dtrace_anon.dta_enabling == NULL);
@@ -2715,9 +2717,6 @@ dtrace_unregister(dtrace_provider_id_t id)
 		 * already held.
 		 */
 		ASSERT(old == dtrace_provider);
-#ifdef illumos
-		ASSERT(dtrace_devi != NULL);
-#endif
 		self = 1;
 
 		if (dtrace_provider->dtpv_next != NULL) {
@@ -2728,6 +2727,10 @@ dtrace_unregister(dtrace_provider_id_t id)
 		}
 	}
 
+	/*
+	 * TODO: We current do not care about probes.
+	 */
+#if 0
 	/*
 	 * Attempt to destroy the probes associated with this provider.
 	 */
@@ -2808,6 +2811,8 @@ dtrace_unregister(dtrace_provider_id_t id)
 		free(probe);
 	}
 
+#endif
+
 	if ((prev = dtrace_provider) == old) {
 		dtrace_provider = old->dtpv_next;
 	} else {
@@ -2815,8 +2820,7 @@ dtrace_unregister(dtrace_provider_id_t id)
 			prev = prev->dtpv_next;
 
 		if (prev == NULL) {
-			panic("attempt to unregister non-existent "
-			    "dtrace provider %p\n", (void *)id);
+			return (ESRCH);
 		}
 
 		prev->dtpv_next = old->dtpv_next;
@@ -2849,4 +2853,26 @@ dtrace_deinit(void)
 
 	err = dtrace_unregister((dtrace_provider_id_t) dtrace_provider);
 	return (err);
+}
+
+char *
+dtrace_providers(size_t *sz)
+{
+	dtrace_provider_t *pv;
+	size_t n;
+	char *providers;
+	char *p;
+
+	n = 0;
+	providers = malloc(dtrace_nprovs * DTRACE_PROVNAMELEN);
+	p = providers;
+
+	for (pv = dtrace_provider; pv != NULL; pv = pv->dtpv_next) {
+		n++;
+		memcpy(p, pv->dtpv_name, DTRACE_PROVNAMELEN);
+		p += DTRACE_PROVNAMELEN;
+	}
+
+	*sz = n;
+	return (providers);
 }

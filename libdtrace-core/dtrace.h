@@ -2241,6 +2241,7 @@ void dtrace_getfsr(uint64_t *);
 
 int dtrace_init(void);
 int dtrace_deinit(void);
+char *dtrace_providers(size_t *);
 
 #ifndef illumos
 #if 0
