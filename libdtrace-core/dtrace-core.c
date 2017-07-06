@@ -134,6 +134,10 @@ static void
 dtrace_vtime_disable(void)
 {}
 
+void
+dtrace_membar_producer(void)
+{}
+
 
 static void
 dtrace_predicate_hold(dtrace_predicate_t *pred)
