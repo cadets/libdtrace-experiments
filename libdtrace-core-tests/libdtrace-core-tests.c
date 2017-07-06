@@ -7,6 +7,9 @@
 
 START_TEST(test_dtrace_init)
 {
+	/*
+	 * Tests the initialization of the library
+	 */
 	int err;
 
 	err = dtrace_init();
@@ -17,6 +20,9 @@ END_TEST
 START_TEST(test_dtrace_deinit)
 {
 	int err;
+	/*
+	 * Initializes the library and tests it's de-initialization
+	 */
 
 	err = dtrace_init();
 	if (err != 0)
@@ -33,6 +39,9 @@ START_TEST(test_dtrace_providers)
 	char *provs;
 	size_t sz;
 	int err;
+	/*
+	 * Test the dtrace_providers() function
+	 */
 
 	err = dtrace_init();
 	if (err != 0)
@@ -46,6 +55,24 @@ START_TEST(test_dtrace_providers)
 	err = dtrace_deinit();
 	if (err != 0)
 		ck_abort_msg("DTrace not properly deinitialized");
+}
+END_TEST
+
+START_TEST(test_dtrace_register)
+{
+	/*
+	 * Test the provider registration
+	 */
+
+}
+END_TEST
+
+START_TEST(test_dtrace_probe_create)
+{
+	/*
+	 * Test probe creation
+	 */
+
 }
 END_TEST
 
