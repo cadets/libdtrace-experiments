@@ -5,3 +5,6 @@
 *.so.*
 *.so
 *.a
+*.full
+*.debug
+libdtrace-core-tests/libdtrace_tests
