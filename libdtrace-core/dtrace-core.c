@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <errno.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -3129,10 +3130,6 @@ dtrace_unregister(dtrace_provider_id_t id)
 	}
 
 	/*
-	 * TODO: We current do not care about probes.
-	 */
-#if 0
-	/*
 	 * Attempt to destroy the probes associated with this provider.
 	 */
 	for (i = 0; i < dtrace_nprobes; i++) {
@@ -3144,25 +3141,6 @@ dtrace_unregister(dtrace_provider_id_t id)
 
 		if (probe->dtpr_ecb == NULL)
 			continue;
-
-		/*
-		 * If we are trying to unregister a defunct provider, and the
-		 * provider was made defunct within the interval dictated by
-		 * dtrace_unregister_defunct_reap, we'll (asynchronously)
-		 * attempt to reap our enablings.  To denote that the provider
-		 * should reattempt to unregister itself at some point in the
-		 * future, we will return a differentiable error code (EAGAIN
-		 * instead of EBUSY) in this case.
-		 */
-		if (dtrace_gethrtime() - old->dtpv_defunct >
-		    dtrace_unregister_defunct_reap)
-			noreap = 1;
-
-		if (noreap)
-			return (EBUSY);
-
-		(void) taskq_dispatch(dtrace_taskq,
-		    (task_func_t *)dtrace_enabling_reap, NULL, TQ_SLEEP);
 
 		return (EAGAIN);
 	}
@@ -3204,8 +3182,6 @@ dtrace_unregister(dtrace_provider_id_t id)
 		free_unr(dtrace_arena, probe->dtpr_id);
 		free(probe);
 	}
-
-#endif
 
 	if ((prev = dtrace_provider) == old) {
 		dtrace_provider = old->dtpv_next;
@@ -3495,9 +3471,23 @@ dtrace_init(void)
 
 	err = dtrace_register("dtrace", &dtrace_provider_attr,
 	    DTRACE_PRIV_NONE, 0, &dtrace_provider_ops, NULL, &id);
-
+	if (err)
+		goto end;
 	dtrace_provider = (dtrace_provider_t *) id;
 
+	dtrace_bymod = dtrace_hash_create(offsetof(dtrace_probe_t, dtpr_mod),
+	    offsetof(dtrace_probe_t, dtpr_nextmod),
+	    offsetof(dtrace_probe_t, dtpr_prevmod));
+
+	dtrace_byfunc = dtrace_hash_create(offsetof(dtrace_probe_t, dtpr_func),
+	    offsetof(dtrace_probe_t, dtpr_nextfunc),
+	    offsetof(dtrace_probe_t, dtpr_prevfunc));
+
+	dtrace_byname = dtrace_hash_create(offsetof(dtrace_probe_t, dtpr_name),
+	    offsetof(dtrace_probe_t, dtpr_nextname),
+	    offsetof(dtrace_probe_t, dtpr_prevname));
+
+end:
 	return (err);
 }
 

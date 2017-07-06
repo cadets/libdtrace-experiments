@@ -95,7 +95,7 @@ START_TEST(test_dtrace_register)
 
 	err = dtrace_init();
 	if (err)
-		ck_abort_msg("DTrace not properly initialized", strerror(err));
+		ck_abort_msg("DTrace not properly initialized: %s", strerror(err));
 
 	err = dtrace_register("test_provider", &test_provider_attr,
 	    DTRACE_PRIV_NONE, 0, &test_provider_ops, NULL, &id);
@@ -117,10 +117,30 @@ END_TEST
 
 START_TEST(test_dtrace_probe_create)
 {
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	int err;
 	/*
 	 * Test probe creation
 	 */
 
+	err = dtrace_init();
+	if (err)
+		ck_abort_msg("DTrace not properly initialized: %s", strerror(err));
+
+	err = dtrace_register("test_provider", &test_provider_attr,
+	    DTRACE_PRIV_NONE, 0, &test_provider_ops, NULL, &id);
+	ck_assert_int_eq(err, 0);
+
+	probeid = dtrace_probe_create(id, "test", "probe",
+	    "foo", 0, NULL);
+
+	err = dtrace_unregister(id);
+	ck_assert_int_eq(err, 0);
+
+	err = dtrace_deinit();
+	if (err)
+		ck_abort_msg("DTrace not properly deinitialized: %s", strerror(err));
 }
 END_TEST
 
