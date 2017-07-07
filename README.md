@@ -20,3 +20,12 @@ well as JUnit using the `report` and `junit` targets:
 make report
 make junit
 ```
+
+Should the tests fail, it's possible to gather the information on a test case
+through the use of
+
+```
+make debugtest TEST=<specification>
+```
+
+This requires for the gdb package to be installed.
