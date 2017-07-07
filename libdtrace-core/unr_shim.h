@@ -24,6 +24,7 @@ struct unrhdr {
 void free_unr(struct unrhdr *, u_int);
 int alloc_unr(struct unrhdr *);
 struct unrhdr *new_unrhdr(int, int, struct mtx *);
+void delete_unrhdr(struct unrhdr *);
 
 #endif
 

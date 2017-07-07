@@ -115,6 +115,10 @@ static dtrace_pops_t	dtrace_provider_ops = {
 	(void (*)(void *, dtrace_id_t, void *))dtrace_nullop
 };
 
+static dtrace_id_t	dtrace_probeid_begin;	/* special BEGIN probe */
+static dtrace_id_t	dtrace_probeid_end;	/* special END probe */
+dtrace_id_t		dtrace_probeid_error;	/* special ERROR probe */
+
 static dtrace_pattr_t	dtrace_provider_attr = {
 { DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
 { DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
@@ -315,15 +319,17 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 				continue;
 			}
 		}
-#endif
 
 		if ((offs = dtrace_buffer_reserve(buf, ecb->dte_needed,
 		    ecb->dte_alignment, state, &mstate)) < 0)
 			continue;
 
+
 		tomax = buf->dtb_tomax;
 		ASSERT(tomax != NULL);
+#endif
 
+#if 0
 		if (ecb->dte_size != 0) {
 			dtrace_rechdr_t dtrh;
 			if (!(mstate.dtms_present & DTRACE_MSTATE_TIMESTAMP)) {
@@ -336,6 +342,7 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 			    mstate.dtms_timestamp);
 			*((dtrace_rechdr_t *)(tomax + offs)) = dtrh;
 		}
+#endif
 
 		mstate.dtms_epid = ecb->dte_epid;
 		mstate.dtms_present |= DTRACE_MSTATE_EPID;
@@ -345,6 +352,7 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 		else
 			mstate.dtms_access = 0;
 
+#if 0
 		if (pred != NULL) {
 			dtrace_difo_t *dp = pred->dtp_difo;
 			uint64_t rval;
@@ -767,12 +775,15 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 
 		if (!committed)
 			buf->dtb_offset = offs + ecb->dte_size;
+#endif
 	}
 
+#if 0
 	if (vtime)
 		curthread->t_dtrace_start = dtrace_gethrtime();
 
 	dtrace_interrupt_enable(cookie);
+#endif
 }
 
 /*
@@ -4094,6 +4105,12 @@ dtrace_init(void)
 	    DTRACE_PRIV_NONE, 0, &dtrace_provider_ops, NULL, &id);
 
 	dtrace_provider = (dtrace_provider_t *) id;
+	assert(dtrace_provider != NULL);
+	assert((dtrace_provider_id_t) dtrace_provider == id);
+
+	dtrace_probeid_begin = dtrace_probe_create(id, NULL, NULL, "BEGIN", 0, NULL);
+	dtrace_probeid_end = dtrace_probe_create(id, NULL, NULL, "END", 0, NULL);
+	dtrace_probeid_error = dtrace_probe_create(id, NULL, NULL, "ERROR", 1, NULL);
 
 	return (err);
 }
@@ -4107,6 +4124,13 @@ dtrace_deinit(void)
 
 	int err;
 	err = dtrace_unregister((dtrace_provider_id_t) dtrace_provider);
+
+	dtrace_hash_destroy(dtrace_bymod);
+	dtrace_hash_destroy(dtrace_byfunc);
+	dtrace_hash_destroy(dtrace_byname);
+
+	delete_unrhdr(dtrace_arena);
+
 	return (err);
 }
 
