@@ -142,6 +142,20 @@ void
 dtrace_membar_producer(void)
 {}
 
+/*
+ * Return a duplicate copy of a string.  If the specified string is NULL,
+ * this function returns a zero-length string.
+ */
+static char *
+dtrace_strdup(const char *str)
+{
+	char *new = calloc(1, (str != NULL ? strlen(str) : 0) + 1);
+
+	if (str != NULL)
+		(void) strcpy(new, str);
+
+	return (new);
+}
 
 static void
 dtrace_predicate_hold(dtrace_predicate_t *pred)
@@ -3847,9 +3861,9 @@ dtrace_probe_create(dtrace_provider_id_t prov, const char *mod,
 
 	probe->dtpr_id = id;
 	probe->dtpr_gen = dtrace_probegen++;
-	probe->dtpr_mod = strdup(mod);
-	probe->dtpr_func = strdup(func);
-	probe->dtpr_name = strdup(name);
+	probe->dtpr_mod = dtrace_strdup(mod);
+	probe->dtpr_func = dtrace_strdup(func);
+	probe->dtpr_name = dtrace_strdup(name);
 	probe->dtpr_arg = arg;
 	probe->dtpr_aframes = aframes;
 	probe->dtpr_provider = provider;
