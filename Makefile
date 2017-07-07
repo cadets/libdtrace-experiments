@@ -4,3 +4,9 @@ SUBDIR=	libdtrace-core libdtrace-core-tests
 
 test:
 	LD_LIBRARY_PATH=${.OBJDIR}/libdtrace-core kyua test
+
+junit:
+	kyua report-junit
+
+report:
+	kyua report
