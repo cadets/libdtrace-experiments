@@ -97,6 +97,10 @@ static int		dtrace_nprobes;		/* number of probes */
 static int		dtrace_nprovs;		/* number of providers */
 static struct unrhdr	*dtrace_arena;		/* Probe ID number.     */
 static struct mtx	dtrace_unr_mtx;
+/*
+ * FIXME: This is so not necessary.
+ */
+static int		curcpu = 1;		/* We are not in SMP, 1 CPU atm */
 size_t		dtrace_statvar_maxsize = (16 * 1024);
 
 volatile uint16_t cpuc_dtrace_flags = 0;	/* userspace shim */
@@ -361,18 +365,25 @@ static int
 dtrace_canload_remains(uint64_t addr, size_t sz, size_t *remain,
     dtrace_mstate_t *mstate, dtrace_vstate_t *vstate)
 {
-	volatile uintptr_t *illval = &cpu_core[curcpu].cpuc_dtrace_illval;
-	file_t *fp;
+	volatile uintptr_t *illval = &cpuc_dtrace_illval;
 
+	/*
+	 * TODO: For the time being, we can read everything. This should
+	 * definitely be addressed though.
+	*/
 	/*
 	 * If we hold the privilege to read from kernel memory, then
 	 * everything is readable.
 	 */
+	/*
 	if ((mstate->dtms_access & DTRACE_ACCESS_KERNEL) != 0) {
+	*/
+	if (1) {
 		DTRACE_RANGE_REMAIN(remain, addr, addr, sz);
 		return (1);
 	}
 
+#if 0
 	/*
 	 * You can obviously read that which you can store.
 	 */
@@ -509,7 +520,7 @@ dtrace_canload_remains(uint64_t addr, size_t sz, size_t *remain,
 #endif
 		}
 	}
-
+#endif
 	DTRACE_CPUFLAG_SET(CPU_DTRACE_KPRIV);
 	*illval = addr;
 	return (0);
@@ -675,7 +686,7 @@ dtrace_strncmp(char *s1, char *s2, size_t limit)
 	if (s1 == s2 || limit == 0)
 		return (0);
 
-	flags = (volatile uint16_t *)&cpu_core[curcpu].cpuc_dtrace_flags;
+	flags = (volatile uint16_t *)&cpuc_dtrace_flags;
 
 	do {
 		if (s1 == NULL) {
