@@ -49,6 +49,15 @@
 	(strcmp(*((char **)((uintptr_t)(lhs) + (hash)->dth_stroffs)), \
 	    *((char **)((uintptr_t)(rhs) + (hash)->dth_stroffs))) == 0)
 
+/*
+ * Here we define the userspace compat shim regarding the CPU_* macros that are
+ * necessary. We don't actually use them as intended, but we can make use of a
+ * few of them in order to keep DTrace behaviour as close as possible to the
+ * original, assuming we have no SMP.
+ */
+#define	CPU_DTRACE_ERROR	0x01
+#define	CPU_DTRACE_DROP		0x02
+
 #define ASSERT3U(...) (0)
 
 dtrace_provider_t *dtrace_provider;
@@ -167,6 +176,1049 @@ dtrace_predicate_hold(dtrace_predicate_t *pred)
 }
 
 /*
+ * Note:  called from probe context.  This function is called to reserve space
+ * in a buffer.  If mstate is non-NULL, sets the scratch base and size in the
+ * mstate.  Returns the new offset in the buffer, or a negative value if an
+ * error has occurred.
+ */
+static intptr_t
+dtrace_buffer_reserve(dtrace_buffer_t *buf, size_t needed, size_t align,
+    dtrace_state_t *state, dtrace_mstate_t *mstate)
+{
+	intptr_t offs = buf->dtb_offset, soffs;
+	intptr_t woffs;
+	caddr_t tomax;
+	size_t total;
+
+	if (buf->dtb_flags & DTRACEBUF_INACTIVE)
+		return (-1);
+
+	if ((tomax = buf->dtb_tomax) == NULL) {
+		dtrace_buffer_drop(buf);
+		return (-1);
+	}
+
+	if (!(buf->dtb_flags & (DTRACEBUF_RING | DTRACEBUF_FILL))) {
+		while (offs & (align - 1)) {
+			/*
+			 * Assert that our alignment is off by a number which
+			 * is itself sizeof (uint32_t) aligned.
+			 */
+			ASSERT(!((align - (offs & (align - 1))) &
+			    (sizeof (uint32_t) - 1)));
+			DTRACE_STORE(uint32_t, tomax, offs, DTRACE_EPIDNONE);
+			offs += sizeof (uint32_t);
+		}
+
+		if ((soffs = offs + needed) > buf->dtb_size) {
+			dtrace_buffer_drop(buf);
+			return (-1);
+		}
+
+		if (mstate == NULL)
+			return (offs);
+
+		mstate->dtms_scratch_base = (uintptr_t)tomax + soffs;
+		mstate->dtms_scratch_size = buf->dtb_size - soffs;
+		mstate->dtms_scratch_ptr = mstate->dtms_scratch_base;
+
+		return (offs);
+	}
+
+	if (buf->dtb_flags & DTRACEBUF_FILL) {
+		if (state->dts_activity != DTRACE_ACTIVITY_COOLDOWN &&
+		    (buf->dtb_flags & DTRACEBUF_FULL))
+			return (-1);
+		goto out;
+	}
+
+	total = needed + (offs & (align - 1));
+
+	/*
+	 * For a ring buffer, life is quite a bit more complicated.  Before
+	 * we can store any padding, we need to adjust our wrapping offset.
+	 * (If we've never before wrapped or we're not about to, no adjustment
+	 * is required.)
+	 */
+	if ((buf->dtb_flags & DTRACEBUF_WRAPPED) ||
+	    offs + total > buf->dtb_size) {
+		woffs = buf->dtb_xamot_offset;
+
+		if (offs + total > buf->dtb_size) {
+			/*
+			 * We can't fit in the end of the buffer.  First, a
+			 * sanity check that we can fit in the buffer at all.
+			 */
+			if (total > buf->dtb_size) {
+				dtrace_buffer_drop(buf);
+				return (-1);
+			}
+
+			/*
+			 * We're going to be storing at the top of the buffer,
+			 * so now we need to deal with the wrapped offset.  We
+			 * only reset our wrapped offset to 0 if it is
+			 * currently greater than the current offset.  If it
+			 * is less than the current offset, it is because a
+			 * previous allocation induced a wrap -- but the
+			 * allocation didn't subsequently take the space due
+			 * to an error or false predicate evaluation.  In this
+			 * case, we'll just leave the wrapped offset alone: if
+			 * the wrapped offset hasn't been advanced far enough
+			 * for this allocation, it will be adjusted in the
+			 * lower loop.
+			 */
+			if (buf->dtb_flags & DTRACEBUF_WRAPPED) {
+				if (woffs >= offs)
+					woffs = 0;
+			} else {
+				woffs = 0;
+			}
+
+			/*
+			 * Now we know that we're going to be storing to the
+			 * top of the buffer and that there is room for us
+			 * there.  We need to clear the buffer from the current
+			 * offset to the end (there may be old gunk there).
+			 */
+			while (offs < buf->dtb_size)
+				tomax[offs++] = 0;
+
+			/*
+			 * We need to set our offset to zero.  And because we
+			 * are wrapping, we need to set the bit indicating as
+			 * much.  We can also adjust our needed space back
+			 * down to the space required by the ECB -- we know
+			 * that the top of the buffer is aligned.
+			 */
+			offs = 0;
+			total = needed;
+			buf->dtb_flags |= DTRACEBUF_WRAPPED;
+		} else {
+			/*
+			 * There is room for us in the buffer, so we simply
+			 * need to check the wrapped offset.
+			 */
+			if (woffs < offs) {
+				/*
+				 * The wrapped offset is less than the offset.
+				 * This can happen if we allocated buffer space
+				 * that induced a wrap, but then we didn't
+				 * subsequently take the space due to an error
+				 * or false predicate evaluation.  This is
+				 * okay; we know that _this_ allocation isn't
+				 * going to induce a wrap.  We still can't
+				 * reset the wrapped offset to be zero,
+				 * however: the space may have been trashed in
+				 * the previous failed probe attempt.  But at
+				 * least the wrapped offset doesn't need to
+				 * be adjusted at all...
+				 */
+				goto out;
+			}
+		}
+
+		while (offs + total > woffs) {
+			dtrace_epid_t epid = *(uint32_t *)(tomax + woffs);
+			size_t size;
+
+			if (epid == DTRACE_EPIDNONE) {
+				size = sizeof (uint32_t);
+			} else {
+				ASSERT3U(epid, <=, state->dts_necbs);
+				ASSERT(state->dts_ecbs[epid - 1] != NULL);
+
+				size = state->dts_ecbs[epid - 1]->dte_size;
+			}
+
+			ASSERT(woffs + size <= buf->dtb_size);
+			ASSERT(size != 0);
+
+			if (woffs + size == buf->dtb_size) {
+				/*
+				 * We've reached the end of the buffer; we want
+				 * to set the wrapped offset to 0 and break
+				 * out.  However, if the offs is 0, then we're
+				 * in a strange edge-condition:  the amount of
+				 * space that we want to reserve plus the size
+				 * of the record that we're overwriting is
+				 * greater than the size of the buffer.  This
+				 * is problematic because if we reserve the
+				 * space but subsequently don't consume it (due
+				 * to a failed predicate or error) the wrapped
+				 * offset will be 0 -- yet the EPID at offset 0
+				 * will not be committed.  This situation is
+				 * relatively easy to deal with:  if we're in
+				 * this case, the buffer is indistinguishable
+				 * from one that hasn't wrapped; we need only
+				 * finish the job by clearing the wrapped bit,
+				 * explicitly setting the offset to be 0, and
+				 * zero'ing out the old data in the buffer.
+				 */
+				if (offs == 0) {
+					buf->dtb_flags &= ~DTRACEBUF_WRAPPED;
+					buf->dtb_offset = 0;
+					woffs = total;
+
+					while (woffs < buf->dtb_size)
+						tomax[woffs++] = 0;
+				}
+
+				woffs = 0;
+				break;
+			}
+
+			woffs += size;
+		}
+
+		/*
+		 * We have a wrapped offset.  It may be that the wrapped offset
+		 * has become zero -- that's okay.
+		 */
+		buf->dtb_xamot_offset = woffs;
+	}
+
+out:
+	/*
+	 * Now we can plow the buffer with any necessary padding.
+	 */
+	while (offs & (align - 1)) {
+		/*
+		 * Assert that our alignment is off by a number which
+		 * is itself sizeof (uint32_t) aligned.
+		 */
+		ASSERT(!((align - (offs & (align - 1))) &
+		    (sizeof (uint32_t) - 1)));
+		DTRACE_STORE(uint32_t, tomax, offs, DTRACE_EPIDNONE);
+		offs += sizeof (uint32_t);
+	}
+
+	if (buf->dtb_flags & DTRACEBUF_FILL) {
+		if (offs + needed > buf->dtb_size - state->dts_reserve) {
+			buf->dtb_flags |= DTRACEBUF_FULL;
+			return (-1);
+		}
+	}
+
+	if (mstate == NULL)
+		return (offs);
+
+	/*
+	 * For ring buffers and fill buffers, the scratch space is always
+	 * the inactive buffer.
+	 */
+	mstate->dtms_scratch_base = (uintptr_t)buf->dtb_xamot;
+	mstate->dtms_scratch_size = buf->dtb_size;
+	mstate->dtms_scratch_ptr = mstate->dtms_scratch_base;
+
+	return (offs);
+}
+
+/*
+ * Emulate the execution of DTrace IR instructions specified by the given
+ * DIF object.  This function is deliberately void of assertions as all of
+ * the necessary checks are handled by a call to dtrace_difo_validate().
+ */
+static uint64_t
+dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
+    dtrace_vstate_t *vstate, dtrace_state_t *state)
+{
+	const dif_instr_t *text = difo->dtdo_buf;
+	const uint_t textlen = difo->dtdo_len;
+	const char *strtab = difo->dtdo_strtab;
+	const uint64_t *inttab = difo->dtdo_inttab;
+
+	uint64_t rval = 0;
+	dtrace_statvar_t *svar;
+	dtrace_dstate_t *dstate = &vstate->dtvs_dynvars;
+	dtrace_difv_t *v;
+	volatile uint16_t *flags = &cpu_core[curcpu].cpuc_dtrace_flags;
+	volatile uintptr_t *illval = &cpu_core[curcpu].cpuc_dtrace_illval;
+
+	dtrace_key_t tupregs[DIF_DTR_NREGS + 2]; /* +2 for thread and id */
+	uint64_t regs[DIF_DIR_NREGS];
+	uint64_t *tmp;
+
+	uint8_t cc_n = 0, cc_z = 0, cc_v = 0, cc_c = 0;
+	int64_t cc_r;
+	uint_t pc = 0, id, opc = 0;
+	uint8_t ttop = 0;
+	dif_instr_t instr;
+	uint_t r1, r2, rd;
+
+	/*
+	 * We stash the current DIF object into the machine state: we need it
+	 * for subsequent access checking.
+	 */
+	mstate->dtms_difo = difo;
+
+	regs[DIF_REG_R0] = 0; 		/* %r0 is fixed at zero */
+
+	while (pc < textlen && !(*flags & CPU_DTRACE_FAULT)) {
+		opc = pc;
+
+		instr = text[pc++];
+		r1 = DIF_INSTR_R1(instr);
+		r2 = DIF_INSTR_R2(instr);
+		rd = DIF_INSTR_RD(instr);
+
+		switch (DIF_INSTR_OP(instr)) {
+		case DIF_OP_OR:
+			regs[rd] = regs[r1] | regs[r2];
+			break;
+		case DIF_OP_XOR:
+			regs[rd] = regs[r1] ^ regs[r2];
+			break;
+		case DIF_OP_AND:
+			regs[rd] = regs[r1] & regs[r2];
+			break;
+		case DIF_OP_SLL:
+			regs[rd] = regs[r1] << regs[r2];
+			break;
+		case DIF_OP_SRL:
+			regs[rd] = regs[r1] >> regs[r2];
+			break;
+		case DIF_OP_SUB:
+			regs[rd] = regs[r1] - regs[r2];
+			break;
+		case DIF_OP_ADD:
+			regs[rd] = regs[r1] + regs[r2];
+			break;
+		case DIF_OP_MUL:
+			regs[rd] = regs[r1] * regs[r2];
+			break;
+		case DIF_OP_SDIV:
+			if (regs[r2] == 0) {
+				regs[rd] = 0;
+				*flags |= CPU_DTRACE_DIVZERO;
+			} else {
+				regs[rd] = (int64_t)regs[r1] /
+				    (int64_t)regs[r2];
+			}
+			break;
+
+		case DIF_OP_UDIV:
+			if (regs[r2] == 0) {
+				regs[rd] = 0;
+				*flags |= CPU_DTRACE_DIVZERO;
+			} else {
+				regs[rd] = regs[r1] / regs[r2];
+			}
+			break;
+
+		case DIF_OP_SREM:
+			if (regs[r2] == 0) {
+				regs[rd] = 0;
+				*flags |= CPU_DTRACE_DIVZERO;
+			} else {
+				regs[rd] = (int64_t)regs[r1] %
+				    (int64_t)regs[r2];
+			}
+			break;
+
+		case DIF_OP_UREM:
+			if (regs[r2] == 0) {
+				regs[rd] = 0;
+				*flags |= CPU_DTRACE_DIVZERO;
+			} else {
+				regs[rd] = regs[r1] % regs[r2];
+			}
+			break;
+
+		case DIF_OP_NOT:
+			regs[rd] = ~regs[r1];
+			break;
+		case DIF_OP_MOV:
+			regs[rd] = regs[r1];
+			break;
+		case DIF_OP_CMP:
+			cc_r = regs[r1] - regs[r2];
+			cc_n = cc_r < 0;
+			cc_z = cc_r == 0;
+			cc_v = 0;
+			cc_c = regs[r1] < regs[r2];
+			break;
+		case DIF_OP_TST:
+			cc_n = cc_v = cc_c = 0;
+			cc_z = regs[r1] == 0;
+			break;
+		case DIF_OP_BA:
+			pc = DIF_INSTR_LABEL(instr);
+			break;
+		case DIF_OP_BE:
+			if (cc_z)
+				pc = DIF_INSTR_LABEL(instr);
+			break;
+		case DIF_OP_BNE:
+			if (cc_z == 0)
+				pc = DIF_INSTR_LABEL(instr);
+			break;
+		case DIF_OP_BG:
+			if ((cc_z | (cc_n ^ cc_v)) == 0)
+				pc = DIF_INSTR_LABEL(instr);
+			break;
+		case DIF_OP_BGU:
+			if ((cc_c | cc_z) == 0)
+				pc = DIF_INSTR_LABEL(instr);
+			break;
+		case DIF_OP_BGE:
+			if ((cc_n ^ cc_v) == 0)
+				pc = DIF_INSTR_LABEL(instr);
+			break;
+		case DIF_OP_BGEU:
+			if (cc_c == 0)
+				pc = DIF_INSTR_LABEL(instr);
+			break;
+		case DIF_OP_BL:
+			if (cc_n ^ cc_v)
+				pc = DIF_INSTR_LABEL(instr);
+			break;
+		case DIF_OP_BLU:
+			if (cc_c)
+				pc = DIF_INSTR_LABEL(instr);
+			break;
+		case DIF_OP_BLE:
+			if (cc_z | (cc_n ^ cc_v))
+				pc = DIF_INSTR_LABEL(instr);
+			break;
+		case DIF_OP_BLEU:
+			if (cc_c | cc_z)
+				pc = DIF_INSTR_LABEL(instr);
+			break;
+		case DIF_OP_RLDSB:
+			if (!dtrace_canload(regs[r1], 1, mstate, vstate))
+				break;
+			/*FALLTHROUGH*/
+		case DIF_OP_LDSB:
+			regs[rd] = (int8_t)dtrace_load8(regs[r1]);
+			break;
+		case DIF_OP_RLDSH:
+			if (!dtrace_canload(regs[r1], 2, mstate, vstate))
+				break;
+			/*FALLTHROUGH*/
+		case DIF_OP_LDSH:
+			regs[rd] = (int16_t)dtrace_load16(regs[r1]);
+			break;
+		case DIF_OP_RLDSW:
+			if (!dtrace_canload(regs[r1], 4, mstate, vstate))
+				break;
+			/*FALLTHROUGH*/
+		case DIF_OP_LDSW:
+			regs[rd] = (int32_t)dtrace_load32(regs[r1]);
+			break;
+		case DIF_OP_RLDUB:
+			if (!dtrace_canload(regs[r1], 1, mstate, vstate))
+				break;
+			/*FALLTHROUGH*/
+		case DIF_OP_LDUB:
+			regs[rd] = dtrace_load8(regs[r1]);
+			break;
+		case DIF_OP_RLDUH:
+			if (!dtrace_canload(regs[r1], 2, mstate, vstate))
+				break;
+			/*FALLTHROUGH*/
+		case DIF_OP_LDUH:
+			regs[rd] = dtrace_load16(regs[r1]);
+			break;
+		case DIF_OP_RLDUW:
+			if (!dtrace_canload(regs[r1], 4, mstate, vstate))
+				break;
+			/*FALLTHROUGH*/
+		case DIF_OP_LDUW:
+			regs[rd] = dtrace_load32(regs[r1]);
+			break;
+		case DIF_OP_RLDX:
+			if (!dtrace_canload(regs[r1], 8, mstate, vstate))
+				break;
+			/*FALLTHROUGH*/
+		case DIF_OP_LDX:
+			regs[rd] = dtrace_load64(regs[r1]);
+			break;
+		case DIF_OP_ULDSB:
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+			regs[rd] = (int8_t)
+			    dtrace_fuword8((void *)(uintptr_t)regs[r1]);
+			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+			break;
+		case DIF_OP_ULDSH:
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+			regs[rd] = (int16_t)
+			    dtrace_fuword16((void *)(uintptr_t)regs[r1]);
+			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+			break;
+		case DIF_OP_ULDSW:
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+			regs[rd] = (int32_t)
+			    dtrace_fuword32((void *)(uintptr_t)regs[r1]);
+			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+			break;
+		case DIF_OP_ULDUB:
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+			regs[rd] =
+			    dtrace_fuword8((void *)(uintptr_t)regs[r1]);
+			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+			break;
+		case DIF_OP_ULDUH:
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+			regs[rd] =
+			    dtrace_fuword16((void *)(uintptr_t)regs[r1]);
+			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+			break;
+		case DIF_OP_ULDUW:
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+			regs[rd] =
+			    dtrace_fuword32((void *)(uintptr_t)regs[r1]);
+			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+			break;
+		case DIF_OP_ULDX:
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+			regs[rd] =
+			    dtrace_fuword64((void *)(uintptr_t)regs[r1]);
+			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+			break;
+		case DIF_OP_RET:
+			rval = regs[rd];
+			pc = textlen;
+			break;
+		case DIF_OP_NOP:
+			break;
+		case DIF_OP_SETX:
+			regs[rd] = inttab[DIF_INSTR_INTEGER(instr)];
+			break;
+		case DIF_OP_SETS:
+			regs[rd] = (uint64_t)(uintptr_t)
+			    (strtab + DIF_INSTR_STRING(instr));
+			break;
+		case DIF_OP_SCMP: {
+			size_t sz = state->dts_options[DTRACEOPT_STRSIZE];
+			uintptr_t s1 = regs[r1];
+			uintptr_t s2 = regs[r2];
+			size_t lim1, lim2;
+
+			if (s1 != 0 &&
+			    !dtrace_strcanload(s1, sz, &lim1, mstate, vstate))
+				break;
+			if (s2 != 0 &&
+			    !dtrace_strcanload(s2, sz, &lim2, mstate, vstate))
+				break;
+
+			cc_r = dtrace_strncmp((char *)s1, (char *)s2,
+			    MIN(lim1, lim2));
+
+			cc_n = cc_r < 0;
+			cc_z = cc_r == 0;
+			cc_v = cc_c = 0;
+			break;
+		}
+		case DIF_OP_LDGA:
+			regs[rd] = dtrace_dif_variable(mstate, state,
+			    r1, regs[r2]);
+			break;
+		case DIF_OP_LDGS:
+			id = DIF_INSTR_VAR(instr);
+
+			if (id >= DIF_VAR_OTHER_UBASE) {
+				uintptr_t a;
+
+				id -= DIF_VAR_OTHER_UBASE;
+				svar = vstate->dtvs_globals[id];
+				ASSERT(svar != NULL);
+				v = &svar->dtsv_var;
+
+				if (!(v->dtdv_type.dtdt_flags & DIF_TF_BYREF)) {
+					regs[rd] = svar->dtsv_data;
+					break;
+				}
+
+				a = (uintptr_t)svar->dtsv_data;
+
+				if (*(uint8_t *)a == UINT8_MAX) {
+					/*
+					 * If the 0th byte is set to UINT8_MAX
+					 * then this is to be treated as a
+					 * reference to a NULL variable.
+					 */
+					regs[rd] = 0;
+				} else {
+					regs[rd] = a + sizeof (uint64_t);
+				}
+
+				break;
+			}
+
+			regs[rd] = dtrace_dif_variable(mstate, state, id, 0);
+			break;
+
+		case DIF_OP_STGS:
+			id = DIF_INSTR_VAR(instr);
+
+			ASSERT(id >= DIF_VAR_OTHER_UBASE);
+			id -= DIF_VAR_OTHER_UBASE;
+
+			VERIFY(id < vstate->dtvs_nglobals);
+			svar = vstate->dtvs_globals[id];
+			ASSERT(svar != NULL);
+			v = &svar->dtsv_var;
+
+			if (v->dtdv_type.dtdt_flags & DIF_TF_BYREF) {
+				uintptr_t a = (uintptr_t)svar->dtsv_data;
+				size_t lim;
+
+				ASSERT(a != 0);
+				ASSERT(svar->dtsv_size != 0);
+
+				if (regs[rd] == 0) {
+					*(uint8_t *)a = UINT8_MAX;
+					break;
+				} else {
+					*(uint8_t *)a = 0;
+					a += sizeof (uint64_t);
+				}
+				if (!dtrace_vcanload(
+				    (void *)(uintptr_t)regs[rd], &v->dtdv_type,
+				    &lim, mstate, vstate))
+					break;
+
+				dtrace_vcopy((void *)(uintptr_t)regs[rd],
+				    (void *)a, &v->dtdv_type, lim);
+				break;
+			}
+
+			svar->dtsv_data = regs[rd];
+			break;
+
+		case DIF_OP_LDTA:
+			/*
+			 * There are no DTrace built-in thread-local arrays at
+			 * present.  This opcode is saved for future work.
+			 */
+			*flags |= CPU_DTRACE_ILLOP;
+			regs[rd] = 0;
+			break;
+
+		case DIF_OP_LDLS:
+			id = DIF_INSTR_VAR(instr);
+
+			if (id < DIF_VAR_OTHER_UBASE) {
+				/*
+				 * For now, this has no meaning.
+				 */
+				regs[rd] = 0;
+				break;
+			}
+
+			id -= DIF_VAR_OTHER_UBASE;
+
+			ASSERT(id < vstate->dtvs_nlocals);
+			ASSERT(vstate->dtvs_locals != NULL);
+
+			svar = vstate->dtvs_locals[id];
+			ASSERT(svar != NULL);
+			v = &svar->dtsv_var;
+
+			if (v->dtdv_type.dtdt_flags & DIF_TF_BYREF) {
+				uintptr_t a = (uintptr_t)svar->dtsv_data;
+				size_t sz = v->dtdv_type.dtdt_size;
+				size_t lim;
+
+				sz += sizeof (uint64_t);
+				ASSERT(svar->dtsv_size == NCPU * sz);
+				a += curcpu * sz;
+
+				if (*(uint8_t *)a == UINT8_MAX) {
+					/*
+					 * If the 0th byte is set to UINT8_MAX
+					 * then this is to be treated as a
+					 * reference to a NULL variable.
+					 */
+					regs[rd] = 0;
+				} else {
+					regs[rd] = a + sizeof (uint64_t);
+				}
+
+				break;
+			}
+
+			ASSERT(svar->dtsv_size == NCPU * sizeof (uint64_t));
+			tmp = (uint64_t *)(uintptr_t)svar->dtsv_data;
+			regs[rd] = tmp[curcpu];
+			break;
+
+		case DIF_OP_STLS:
+			id = DIF_INSTR_VAR(instr);
+
+			ASSERT(id >= DIF_VAR_OTHER_UBASE);
+			id -= DIF_VAR_OTHER_UBASE;
+			VERIFY(id < vstate->dtvs_nlocals);
+
+			ASSERT(vstate->dtvs_locals != NULL);
+			svar = vstate->dtvs_locals[id];
+			ASSERT(svar != NULL);
+			v = &svar->dtsv_var;
+
+			if (v->dtdv_type.dtdt_flags & DIF_TF_BYREF) {
+				uintptr_t a = (uintptr_t)svar->dtsv_data;
+				size_t sz = v->dtdv_type.dtdt_size;
+				size_t lim;
+
+				sz += sizeof (uint64_t);
+				ASSERT(svar->dtsv_size == NCPU * sz);
+				a += curcpu * sz;
+
+				if (regs[rd] == 0) {
+					*(uint8_t *)a = UINT8_MAX;
+					break;
+				} else {
+					*(uint8_t *)a = 0;
+					a += sizeof (uint64_t);
+				}
+
+				if (!dtrace_vcanload(
+				    (void *)(uintptr_t)regs[rd], &v->dtdv_type,
+				    &lim, mstate, vstate))
+					break;
+
+				dtrace_vcopy((void *)(uintptr_t)regs[rd],
+				    (void *)a, &v->dtdv_type, lim);
+				break;
+			}
+
+			ASSERT(svar->dtsv_size == NCPU * sizeof (uint64_t));
+			tmp = (uint64_t *)(uintptr_t)svar->dtsv_data;
+			tmp[curcpu] = regs[rd];
+			break;
+
+		case DIF_OP_LDTS: {
+			dtrace_dynvar_t *dvar;
+			dtrace_key_t *key;
+
+			id = DIF_INSTR_VAR(instr);
+			ASSERT(id >= DIF_VAR_OTHER_UBASE);
+			id -= DIF_VAR_OTHER_UBASE;
+			v = &vstate->dtvs_tlocals[id];
+
+			key = &tupregs[DIF_DTR_NREGS];
+			key[0].dttk_value = (uint64_t)id;
+			key[0].dttk_size = 0;
+			DTRACE_TLS_THRKEY(key[1].dttk_value);
+			key[1].dttk_size = 0;
+
+			dvar = dtrace_dynvar(dstate, 2, key,
+			    sizeof (uint64_t), DTRACE_DYNVAR_NOALLOC,
+			    mstate, vstate);
+
+			if (dvar == NULL) {
+				regs[rd] = 0;
+				break;
+			}
+
+			if (v->dtdv_type.dtdt_flags & DIF_TF_BYREF) {
+				regs[rd] = (uint64_t)(uintptr_t)dvar->dtdv_data;
+			} else {
+				regs[rd] = *((uint64_t *)dvar->dtdv_data);
+			}
+
+			break;
+		}
+
+		case DIF_OP_STTS: {
+			dtrace_dynvar_t *dvar;
+			dtrace_key_t *key;
+
+			id = DIF_INSTR_VAR(instr);
+			ASSERT(id >= DIF_VAR_OTHER_UBASE);
+			id -= DIF_VAR_OTHER_UBASE;
+			VERIFY(id < vstate->dtvs_ntlocals);
+
+			key = &tupregs[DIF_DTR_NREGS];
+			key[0].dttk_value = (uint64_t)id;
+			key[0].dttk_size = 0;
+			DTRACE_TLS_THRKEY(key[1].dttk_value);
+			key[1].dttk_size = 0;
+			v = &vstate->dtvs_tlocals[id];
+
+			dvar = dtrace_dynvar(dstate, 2, key,
+			    v->dtdv_type.dtdt_size > sizeof (uint64_t) ?
+			    v->dtdv_type.dtdt_size : sizeof (uint64_t),
+			    regs[rd] ? DTRACE_DYNVAR_ALLOC :
+			    DTRACE_DYNVAR_DEALLOC, mstate, vstate);
+
+			/*
+			 * Given that we're storing to thread-local data,
+			 * we need to flush our predicate cache.
+			 */
+			curthread->t_predcache = 0;
+
+			if (dvar == NULL)
+				break;
+
+			if (v->dtdv_type.dtdt_flags & DIF_TF_BYREF) {
+				size_t lim;
+
+				if (!dtrace_vcanload(
+				    (void *)(uintptr_t)regs[rd],
+				    &v->dtdv_type, &lim, mstate, vstate))
+					break;
+
+				dtrace_vcopy((void *)(uintptr_t)regs[rd],
+				    dvar->dtdv_data, &v->dtdv_type, lim);
+			} else {
+				*((uint64_t *)dvar->dtdv_data) = regs[rd];
+			}
+
+			break;
+		}
+
+		case DIF_OP_SRA:
+			regs[rd] = (int64_t)regs[r1] >> regs[r2];
+			break;
+
+		case DIF_OP_CALL:
+			dtrace_dif_subr(DIF_INSTR_SUBR(instr), rd,
+			    regs, tupregs, ttop, mstate, state);
+			break;
+
+		case DIF_OP_PUSHTR:
+			if (ttop == DIF_DTR_NREGS) {
+				*flags |= CPU_DTRACE_TUPOFLOW;
+				break;
+			}
+
+			if (r1 == DIF_TYPE_STRING) {
+				/*
+				 * If this is a string type and the size is 0,
+				 * we'll use the system-wide default string
+				 * size.  Note that we are _not_ looking at
+				 * the value of the DTRACEOPT_STRSIZE option;
+				 * had this been set, we would expect to have
+				 * a non-zero size value in the "pushtr".
+				 */
+				tupregs[ttop].dttk_size =
+				    dtrace_strlen((char *)(uintptr_t)regs[rd],
+				    regs[r2] ? regs[r2] :
+				    dtrace_strsize_default) + 1;
+			} else {
+				if (regs[r2] > LONG_MAX) {
+					*flags |= CPU_DTRACE_ILLOP;
+					break;
+				}
+
+				tupregs[ttop].dttk_size = regs[r2];
+			}
+
+			tupregs[ttop++].dttk_value = regs[rd];
+			break;
+
+		case DIF_OP_PUSHTV:
+			if (ttop == DIF_DTR_NREGS) {
+				*flags |= CPU_DTRACE_TUPOFLOW;
+				break;
+			}
+
+			tupregs[ttop].dttk_value = regs[rd];
+			tupregs[ttop++].dttk_size = 0;
+			break;
+
+		case DIF_OP_POPTS:
+			if (ttop != 0)
+				ttop--;
+			break;
+
+		case DIF_OP_FLUSHTS:
+			ttop = 0;
+			break;
+
+		case DIF_OP_LDGAA:
+		case DIF_OP_LDTAA: {
+			dtrace_dynvar_t *dvar;
+			dtrace_key_t *key = tupregs;
+			uint_t nkeys = ttop;
+
+			id = DIF_INSTR_VAR(instr);
+			ASSERT(id >= DIF_VAR_OTHER_UBASE);
+			id -= DIF_VAR_OTHER_UBASE;
+
+			key[nkeys].dttk_value = (uint64_t)id;
+			key[nkeys++].dttk_size = 0;
+
+			if (DIF_INSTR_OP(instr) == DIF_OP_LDTAA) {
+				DTRACE_TLS_THRKEY(key[nkeys].dttk_value);
+				key[nkeys++].dttk_size = 0;
+				VERIFY(id < vstate->dtvs_ntlocals);
+				v = &vstate->dtvs_tlocals[id];
+			} else {
+				VERIFY(id < vstate->dtvs_nglobals);
+				v = &vstate->dtvs_globals[id]->dtsv_var;
+			}
+
+			dvar = dtrace_dynvar(dstate, nkeys, key,
+			    v->dtdv_type.dtdt_size > sizeof (uint64_t) ?
+			    v->dtdv_type.dtdt_size : sizeof (uint64_t),
+			    DTRACE_DYNVAR_NOALLOC, mstate, vstate);
+
+			if (dvar == NULL) {
+				regs[rd] = 0;
+				break;
+			}
+
+			if (v->dtdv_type.dtdt_flags & DIF_TF_BYREF) {
+				regs[rd] = (uint64_t)(uintptr_t)dvar->dtdv_data;
+			} else {
+				regs[rd] = *((uint64_t *)dvar->dtdv_data);
+			}
+
+			break;
+		}
+
+		case DIF_OP_STGAA:
+		case DIF_OP_STTAA: {
+			dtrace_dynvar_t *dvar;
+			dtrace_key_t *key = tupregs;
+			uint_t nkeys = ttop;
+
+			id = DIF_INSTR_VAR(instr);
+			ASSERT(id >= DIF_VAR_OTHER_UBASE);
+			id -= DIF_VAR_OTHER_UBASE;
+
+			key[nkeys].dttk_value = (uint64_t)id;
+			key[nkeys++].dttk_size = 0;
+
+			if (DIF_INSTR_OP(instr) == DIF_OP_STTAA) {
+				DTRACE_TLS_THRKEY(key[nkeys].dttk_value);
+				key[nkeys++].dttk_size = 0;
+				VERIFY(id < vstate->dtvs_ntlocals);
+				v = &vstate->dtvs_tlocals[id];
+			} else {
+				VERIFY(id < vstate->dtvs_nglobals);
+				v = &vstate->dtvs_globals[id]->dtsv_var;
+			}
+
+			dvar = dtrace_dynvar(dstate, nkeys, key,
+			    v->dtdv_type.dtdt_size > sizeof (uint64_t) ?
+			    v->dtdv_type.dtdt_size : sizeof (uint64_t),
+			    regs[rd] ? DTRACE_DYNVAR_ALLOC :
+			    DTRACE_DYNVAR_DEALLOC, mstate, vstate);
+
+			if (dvar == NULL)
+				break;
+
+			if (v->dtdv_type.dtdt_flags & DIF_TF_BYREF) {
+				size_t lim;
+
+				if (!dtrace_vcanload(
+				    (void *)(uintptr_t)regs[rd], &v->dtdv_type,
+				    &lim, mstate, vstate))
+					break;
+
+				dtrace_vcopy((void *)(uintptr_t)regs[rd],
+				    dvar->dtdv_data, &v->dtdv_type, lim);
+			} else {
+				*((uint64_t *)dvar->dtdv_data) = regs[rd];
+			}
+
+			break;
+		}
+
+		case DIF_OP_ALLOCS: {
+			uintptr_t ptr = P2ROUNDUP(mstate->dtms_scratch_ptr, 8);
+			size_t size = ptr - mstate->dtms_scratch_ptr + regs[r1];
+
+			/*
+			 * Rounding up the user allocation size could have
+			 * overflowed large, bogus allocations (like -1ULL) to
+			 * 0.
+			 */
+			if (size < regs[r1] ||
+			    !DTRACE_INSCRATCH(mstate, size)) {
+				DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+				regs[rd] = 0;
+				break;
+			}
+
+			dtrace_bzero((void *) mstate->dtms_scratch_ptr, size);
+			mstate->dtms_scratch_ptr += size;
+			regs[rd] = ptr;
+			break;
+		}
+
+		case DIF_OP_COPYS:
+			if (!dtrace_canstore(regs[rd], regs[r2],
+			    mstate, vstate)) {
+				*flags |= CPU_DTRACE_BADADDR;
+				*illval = regs[rd];
+				break;
+			}
+
+			if (!dtrace_canload(regs[r1], regs[r2], mstate, vstate))
+				break;
+
+			dtrace_bcopy((void *)(uintptr_t)regs[r1],
+			    (void *)(uintptr_t)regs[rd], (size_t)regs[r2]);
+			break;
+
+		case DIF_OP_STB:
+			if (!dtrace_canstore(regs[rd], 1, mstate, vstate)) {
+				*flags |= CPU_DTRACE_BADADDR;
+				*illval = regs[rd];
+				break;
+			}
+			*((uint8_t *)(uintptr_t)regs[rd]) = (uint8_t)regs[r1];
+			break;
+
+		case DIF_OP_STH:
+			if (!dtrace_canstore(regs[rd], 2, mstate, vstate)) {
+				*flags |= CPU_DTRACE_BADADDR;
+				*illval = regs[rd];
+				break;
+			}
+			if (regs[rd] & 1) {
+				*flags |= CPU_DTRACE_BADALIGN;
+				*illval = regs[rd];
+				break;
+			}
+			*((uint16_t *)(uintptr_t)regs[rd]) = (uint16_t)regs[r1];
+			break;
+
+		case DIF_OP_STW:
+			if (!dtrace_canstore(regs[rd], 4, mstate, vstate)) {
+				*flags |= CPU_DTRACE_BADADDR;
+				*illval = regs[rd];
+				break;
+			}
+			if (regs[rd] & 3) {
+				*flags |= CPU_DTRACE_BADALIGN;
+				*illval = regs[rd];
+				break;
+			}
+			*((uint32_t *)(uintptr_t)regs[rd]) = (uint32_t)regs[r1];
+			break;
+
+		case DIF_OP_STX:
+			if (!dtrace_canstore(regs[rd], 8, mstate, vstate)) {
+				*flags |= CPU_DTRACE_BADADDR;
+				*illval = regs[rd];
+				break;
+			}
+			if (regs[rd] & 7) {
+				*flags |= CPU_DTRACE_BADALIGN;
+				*illval = regs[rd];
+				break;
+			}
+			*((uint64_t *)(uintptr_t)regs[rd]) = regs[r1];
+			break;
+		}
+	}
+
+	if (!(*flags & CPU_DTRACE_FAULT))
+		return (rval);
+
+	mstate->dtms_fltoffs = opc * sizeof (dif_instr_t);
+	mstate->dtms_present |= DTRACE_MSTATE_FLTOFFS;
+
+	return (0);
+}
+
+/*
  * If you're looking for the epicenter of DTrace, you just found it.  This
  * is the function called by the provider to fire a probe -- from which all
  * subsequent probe-context DTrace activity emanates.
@@ -222,13 +1274,11 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 		dtrace_predicate_t *pred = ecb->dte_predicate;
 		dtrace_state_t *state = ecb->dte_state;
 		/*
-		 * TODO: We still want to aggregate, but definitely not by
-		 * cpuid.
+		 * TODO: Figure out how to best aggregate (probably by arbitrary
+		 * things??)
 		 */
-#if 0
-		dtrace_buffer_t *buf = &state->dts_buffer[cpuid];
-		dtrace_buffer_t *aggbuf = &state->dts_aggbuffer[cpuid];
-#endif
+		dtrace_buffer_t *buf = &state->dts_buffer;
+		dtrace_buffer_t *aggbuf = &state->dts_aggbuffer;
 		dtrace_vstate_t *vstate = &state->dts_vstate;
 		dtrace_provider_t *prov = probe->dtpr_provider;
 		uint64_t tracememsize = 0;
@@ -250,9 +1300,7 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 		mstate.dtms_present = DTRACE_MSTATE_ARGS | DTRACE_MSTATE_PROBE;
 		mstate.dtms_getf = NULL;
 
-#if 0
 		*flags &= ~CPU_DTRACE_ERROR;
-#endif
 
 		if (prov == dtrace_provider) {
 			/*
@@ -333,6 +1381,7 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 				continue;
 			}
 		}
+#endif
 
 		if ((offs = dtrace_buffer_reserve(buf, ecb->dte_needed,
 		    ecb->dte_alignment, state, &mstate)) < 0)
@@ -341,8 +1390,10 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 
 		tomax = buf->dtb_tomax;
 		ASSERT(tomax != NULL);
-#endif
 
+		/*
+		 * TODO: Figure out how to timestamp
+		 */
 #if 0
 		if (ecb->dte_size != 0) {
 			dtrace_rechdr_t dtrh;
@@ -366,7 +1417,6 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 		else
 			mstate.dtms_access = 0;
 
-#if 0
 		if (pred != NULL) {
 			dtrace_difo_t *dp = pred->dtp_difo;
 			uint64_t rval;
@@ -789,7 +1839,6 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 
 		if (!committed)
 			buf->dtb_offset = offs + ecb->dte_size;
-#endif
 	}
 
 #if 0
