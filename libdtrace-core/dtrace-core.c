@@ -1819,6 +1819,319 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 	return (0);
 }
 
+static void
+dtrace_action_breakpoint(dtrace_ecb_t *ecb)
+{
+	dtrace_probe_t *probe = ecb->dte_probe;
+	dtrace_provider_t *prov = probe->dtpr_provider;
+	char c[DTRACE_FULLNAMELEN + 80], *str;
+	char *msg = "dtrace: breakpoint action at probe ";
+	char *ecbmsg = " (ecb ";
+	uintptr_t mask = (0xf << (sizeof (uintptr_t) * NBBY / 4));
+	uintptr_t val = (uintptr_t)ecb;
+	int shift = (sizeof (uintptr_t) * NBBY) - 4, i = 0;
+
+	if (dtrace_destructive_disallow)
+		return;
+
+	/*
+	 * It's impossible to be taking action on the NULL probe.
+	 */
+	ASSERT(probe != NULL);
+
+	/*
+	 * This is a poor man's (destitute man's?) sprintf():  we want to
+	 * print the provider name, module name, function name and name of
+	 * the probe, along with the hex address of the ECB with the breakpoint
+	 * action -- all of which we must place in the character buffer by
+	 * hand.
+	 */
+	while (*msg != '\0')
+		c[i++] = *msg++;
+
+	for (str = prov->dtpv_name; *str != '\0'; str++)
+		c[i++] = *str;
+	c[i++] = ':';
+
+	for (str = probe->dtpr_mod; *str != '\0'; str++)
+		c[i++] = *str;
+	c[i++] = ':';
+
+	for (str = probe->dtpr_func; *str != '\0'; str++)
+		c[i++] = *str;
+	c[i++] = ':';
+
+	for (str = probe->dtpr_name; *str != '\0'; str++)
+		c[i++] = *str;
+
+	while (*ecbmsg != '\0')
+		c[i++] = *ecbmsg++;
+
+	while (shift >= 0) {
+		mask = (uintptr_t)0xf << shift;
+
+		if (val >= ((uintptr_t)1 << shift))
+			c[i++] = "0123456789abcdef"[(val & mask) >> shift];
+		shift -= 4;
+	}
+
+	c[i++] = ')';
+	c[i] = '\0';
+
+#ifdef illumos
+	debug_enter(c);
+#else
+	kdb_enter(KDB_WHY_DTRACE, "breakpoint action");
+#endif
+}
+
+static void
+dtrace_action_panic(dtrace_ecb_t *ecb)
+{
+	dtrace_probe_t *probe = ecb->dte_probe;
+
+	/*
+	 * It's impossible to be taking action on the NULL probe.
+	 */
+	ASSERT(probe != NULL);
+
+	if (dtrace_destructive_disallow)
+		return;
+
+	if (dtrace_panicked != NULL)
+		return;
+
+	if (dtrace_casptr(&dtrace_panicked, NULL, curthread) != NULL)
+		return;
+
+	/*
+	 * We won the right to panic.  (We want to be sure that only one
+	 * thread calls panic() from dtrace_probe(), and that panic() is
+	 * called exactly once.)
+	 */
+	dtrace_panic("dtrace: panic action at probe %s:%s:%s:%s (ecb %p)",
+	    probe->dtpr_provider->dtpv_name, probe->dtpr_mod,
+	    probe->dtpr_func, probe->dtpr_name, (void *)ecb);
+}
+
+static void
+dtrace_action_raise(uint64_t sig)
+{
+	if (dtrace_destructive_disallow)
+		return;
+
+	if (sig >= NSIG) {
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_ILLOP);
+		return;
+	}
+
+#ifdef illumos
+	/*
+	 * raise() has a queue depth of 1 -- we ignore all subsequent
+	 * invocations of the raise() action.
+	 */
+	if (curthread->t_dtrace_sig == 0)
+		curthread->t_dtrace_sig = (uint8_t)sig;
+
+	curthread->t_sig_check = 1;
+	aston(curthread);
+#else
+	struct proc *p = curproc;
+	PROC_LOCK(p);
+	kern_psignal(p, sig);
+	PROC_UNLOCK(p);
+#endif
+}
+
+static void
+dtrace_action_stop(void)
+{
+	if (dtrace_destructive_disallow)
+		return;
+
+#ifdef illumos
+	if (!curthread->t_dtrace_stop) {
+		curthread->t_dtrace_stop = 1;
+		curthread->t_sig_check = 1;
+		aston(curthread);
+	}
+#else
+	struct proc *p = curproc;
+	PROC_LOCK(p);
+	kern_psignal(p, SIGSTOP);
+	PROC_UNLOCK(p);
+#endif
+}
+
+static void
+dtrace_action_chill(dtrace_mstate_t *mstate, hrtime_t val)
+{
+	hrtime_t now;
+	volatile uint16_t *flags;
+#ifdef illumos
+	cpu_t *cpu = CPU;
+#else
+	cpu_t *cpu = &solaris_cpu[curcpu];
+#endif
+
+	if (dtrace_destructive_disallow)
+		return;
+
+	flags = (volatile uint16_t *)&cpu_core[curcpu].cpuc_dtrace_flags;
+
+	now = dtrace_gethrtime();
+
+	if (now - cpu->cpu_dtrace_chillmark > dtrace_chill_interval) {
+		/*
+		 * We need to advance the mark to the current time.
+		 */
+		cpu->cpu_dtrace_chillmark = now;
+		cpu->cpu_dtrace_chilled = 0;
+	}
+
+	/*
+	 * Now check to see if the requested chill time would take us over
+	 * the maximum amount of time allowed in the chill interval.  (Or
+	 * worse, if the calculation itself induces overflow.)
+	 */
+	if (cpu->cpu_dtrace_chilled + val > dtrace_chill_max ||
+	    cpu->cpu_dtrace_chilled + val < cpu->cpu_dtrace_chilled) {
+		*flags |= CPU_DTRACE_ILLOP;
+		return;
+	}
+
+	while (dtrace_gethrtime() - now < val)
+		continue;
+
+	/*
+	 * Normally, we assure that the value of the variable "timestamp" does
+	 * not change within an ECB.  The presence of chill() represents an
+	 * exception to this rule, however.
+	 */
+	mstate->dtms_present &= ~DTRACE_MSTATE_TIMESTAMP;
+	cpu->cpu_dtrace_chilled += val;
+}
+
+static void
+dtrace_action_ustack(dtrace_mstate_t *mstate, dtrace_state_t *state,
+    uint64_t *buf, uint64_t arg)
+{
+	int nframes = DTRACE_USTACK_NFRAMES(arg);
+	int strsize = DTRACE_USTACK_STRSIZE(arg);
+	uint64_t *pcs = &buf[1], *fps;
+	char *str = (char *)&pcs[nframes];
+	int size, offs = 0, i, j;
+	size_t rem;
+	uintptr_t old = mstate->dtms_scratch_ptr, saved;
+	uint16_t *flags = &cpu_core[curcpu].cpuc_dtrace_flags;
+	char *sym;
+
+	/*
+	 * Should be taking a faster path if string space has not been
+	 * allocated.
+	 */
+	ASSERT(strsize != 0);
+
+	/*
+	 * We will first allocate some temporary space for the frame pointers.
+	 */
+	fps = (uint64_t *)P2ROUNDUP(mstate->dtms_scratch_ptr, 8);
+	size = (uintptr_t)fps - mstate->dtms_scratch_ptr +
+	    (nframes * sizeof (uint64_t));
+
+	if (!DTRACE_INSCRATCH(mstate, size)) {
+		/*
+		 * Not enough room for our frame pointers -- need to indicate
+		 * that we ran out of scratch space.
+		 */
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+		return;
+	}
+
+	mstate->dtms_scratch_ptr += size;
+	saved = mstate->dtms_scratch_ptr;
+
+	/*
+	 * Now get a stack with both program counters and frame pointers.
+	 */
+	DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+	dtrace_getufpstack(buf, fps, nframes + 1);
+	DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+
+	/*
+	 * If that faulted, we're cooked.
+	 */
+	if (*flags & CPU_DTRACE_FAULT)
+		goto out;
+
+	/*
+	 * Now we want to walk up the stack, calling the USTACK helper.  For
+	 * each iteration, we restore the scratch pointer.
+	 */
+	for (i = 0; i < nframes; i++) {
+		mstate->dtms_scratch_ptr = saved;
+
+		if (offs >= strsize)
+			break;
+
+		sym = (char *)(uintptr_t)dtrace_helper(
+		    DTRACE_HELPER_ACTION_USTACK,
+		    mstate, state, pcs[i], fps[i]);
+
+		/*
+		 * If we faulted while running the helper, we're going to
+		 * clear the fault and null out the corresponding string.
+		 */
+		if (*flags & CPU_DTRACE_FAULT) {
+			*flags &= ~CPU_DTRACE_FAULT;
+			str[offs++] = '\0';
+			continue;
+		}
+
+		if (sym == NULL) {
+			str[offs++] = '\0';
+			continue;
+		}
+
+		if (!dtrace_strcanload((uintptr_t)sym, strsize, &rem, mstate,
+		    &(state->dts_vstate))) {
+			str[offs++] = '\0';
+			continue;
+		}
+
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+
+		/*
+		 * Now copy in the string that the helper returned to us.
+		 */
+		for (j = 0; offs + j < strsize && j < rem; j++) {
+			if ((str[offs + j] = sym[j]) == '\0')
+				break;
+		}
+
+		DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+
+		offs += j + 1;
+	}
+
+	if (offs >= strsize) {
+		/*
+		 * If we didn't have room for all of the strings, we don't
+		 * abort processing -- this needn't be a fatal error -- but we
+		 * still want to increment a counter (dts_stkstroverflows) to
+		 * allow this condition to be warned about.  (If this is from
+		 * a jstack() action, it is easily tuned via jstackstrsize.)
+		 */
+		dtrace_error(&state->dts_stkstroverflows);
+	}
+
+	while (offs < strsize)
+		str[offs++] = '\0';
+
+out:
+	mstate->dtms_scratch_ptr = old;
+}
+
 /*
  * DTrace Probe Hashing Functions
  *
