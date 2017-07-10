@@ -101,6 +101,7 @@ static struct mtx	dtrace_unr_mtx;
  * FIXME: This is so not necessary.
  */
 static int		curcpu = 1;		/* We are not in SMP, 1 CPU atm */
+static int		predcache = 0;		/* There's no multithreaded kind-of-thing going on */
 size_t		dtrace_statvar_maxsize = (16 * 1024);
 
 volatile uint16_t cpuc_dtrace_flags = 0;	/* userspace shim */
@@ -1506,7 +1507,7 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 			 * Given that we're storing to thread-local data,
 			 * we need to flush our predicate cache.
 			 */
-			curthread->t_predcache = 0;
+			predcache = 0;
 
 			if (dvar == NULL)
 				break;
@@ -1990,7 +1991,7 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 					 * Update the predicate cache...
 					 */
 					ASSERT(cid == pred->dtp_cacheid);
-					curthread->t_predcache = cid;
+					t_predcache = cid;
 				}
 
 				continue;
