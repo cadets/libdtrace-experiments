@@ -3436,7 +3436,7 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 					 * Update the predicate cache...
 					 */
 					assert(cid == pred->dtp_cacheid);
-					t_predcache = cid;
+					predcache = cid;
 				}
 
 				continue;
