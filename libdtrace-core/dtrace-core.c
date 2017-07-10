@@ -70,6 +70,17 @@
 #define	DT_BSWAP_16(x)	((DT_BSWAP_8(x) << 8) | DT_BSWAP_8((x) >> 8))
 #define	DT_BSWAP_32(x)	((DT_BSWAP_16(x) << 16) | DT_BSWAP_16((x) >> 16))
 #define	DT_BSWAP_64(x)	((DT_BSWAP_32(x) << 32) | DT_BSWAP_32((x) >> 32))
+#define	DTRACE_FLAGS2FLT(flags)						\
+	(((flags) & CPU_DTRACE_BADADDR) ? DTRACEFLT_BADADDR :		\
+	((flags) & CPU_DTRACE_ILLOP) ? DTRACEFLT_ILLOP :		\
+	((flags) & CPU_DTRACE_DIVZERO) ? DTRACEFLT_DIVZERO :		\
+	((flags) & CPU_DTRACE_KPRIV) ? DTRACEFLT_KPRIV :		\
+	((flags) & CPU_DTRACE_UPRIV) ? DTRACEFLT_UPRIV :		\
+	((flags) & CPU_DTRACE_TUPOFLOW) ?  DTRACEFLT_TUPOFLOW :		\
+	((flags) & CPU_DTRACE_BADALIGN) ?  DTRACEFLT_BADALIGN :		\
+	((flags) & CPU_DTRACE_NOSCRATCH) ?  DTRACEFLT_NOSCRATCH :	\
+	((flags) & CPU_DTRACE_BADSTACK) ?  DTRACEFLT_BADSTACK :		\
+	DTRACEFLT_UNKNOWN)
 
 /*
  * Userspace shim...
