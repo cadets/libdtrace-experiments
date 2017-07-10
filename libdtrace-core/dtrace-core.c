@@ -97,6 +97,7 @@ static int		dtrace_nprobes;		/* number of probes */
 static int		dtrace_nprovs;		/* number of providers */
 static struct unrhdr	*dtrace_arena;		/* Probe ID number.     */
 static struct mtx	dtrace_unr_mtx;
+size_t		dtrace_statvar_maxsize = (16 * 1024);
 
 volatile uint16_t cpuc_dtrace_flags = 0;	/* userspace shim */
 volatile uintptr_t cpuc_dtrace_illval = 0;	/* userspace shim */
@@ -189,6 +190,528 @@ dtrace_strdup(const char *str)
 		(void) strcpy(new, str);
 
 	return (new);
+}
+
+static int
+dtrace_canstore_statvar(uint64_t addr, size_t sz, size_t *remain,
+    dtrace_statvar_t **svars, int nsvars)
+{
+	int i;
+	size_t maxglobalsize, maxlocalsize;
+
+	if (nsvars == 0)
+		return (0);
+
+	maxglobalsize = dtrace_statvar_maxsize + sizeof (uint64_t);
+	maxlocalsize = maxglobalsize * NCPU;
+
+	for (i = 0; i < nsvars; i++) {
+		dtrace_statvar_t *svar = svars[i];
+		uint8_t scope;
+		size_t size;
+
+		if (svar == NULL || (size = svar->dtsv_size) == 0)
+			continue;
+
+		scope = svar->dtsv_var.dtdv_scope;
+
+		/*
+		 * We verify that our size is valid in the spirit of providing
+		 * defense in depth:  we want to prevent attackers from using
+		 * DTrace to escalate an orthogonal kernel heap corruption bug
+		 * into the ability to store to arbitrary locations in memory.
+		 */
+		VERIFY((scope == DIFV_SCOPE_GLOBAL && size <= maxglobalsize) ||
+		    (scope == DIFV_SCOPE_LOCAL && size <= maxlocalsize));
+
+		if (DTRACE_INRANGE(addr, sz, svar->dtsv_data,
+		    svar->dtsv_size)) {
+			DTRACE_RANGE_REMAIN(remain, addr, svar->dtsv_data,
+			    svar->dtsv_size);
+			return (1);
+		}
+	}
+
+	return (0);
+}
+
+/*
+ * Check to see if the address is within a memory region to which a store may
+ * be issued.  This includes the DTrace scratch areas, and any DTrace variable
+ * region.  The caller of dtrace_canstore() is responsible for performing any
+ * alignment checks that are needed before stores are actually executed.
+ */
+static int
+dtrace_canstore(uint64_t addr, size_t sz, dtrace_mstate_t *mstate,
+    dtrace_vstate_t *vstate)
+{
+	return (dtrace_canstore_remains(addr, sz, NULL, mstate, vstate));
+}
+
+/*
+ * Implementation of dtrace_canstore which communicates the upper bound of the
+ * allowed memory region.
+ */
+static int
+dtrace_canstore_remains(uint64_t addr, size_t sz, size_t *remain,
+    dtrace_mstate_t *mstate, dtrace_vstate_t *vstate)
+{
+	/*
+	 * First, check to see if the address is in scratch space...
+	 */
+	if (DTRACE_INRANGE(addr, sz, mstate->dtms_scratch_base,
+	    mstate->dtms_scratch_size)) {
+		DTRACE_RANGE_REMAIN(remain, addr, mstate->dtms_scratch_base,
+		    mstate->dtms_scratch_size);
+		return (1);
+	}
+
+	/*
+	 * Now check to see if it's a dynamic variable.  This check will pick
+	 * up both thread-local variables and any global dynamically-allocated
+	 * variables.
+	 */
+	if (DTRACE_INRANGE(addr, sz, vstate->dtvs_dynvars.dtds_base,
+	    vstate->dtvs_dynvars.dtds_size)) {
+		dtrace_dstate_t *dstate = &vstate->dtvs_dynvars;
+		uintptr_t base = (uintptr_t)dstate->dtds_base +
+		    (dstate->dtds_hashsize * sizeof (dtrace_dynhash_t));
+		uintptr_t chunkoffs;
+		dtrace_dynvar_t *dvar;
+
+		/*
+		 * Before we assume that we can store here, we need to make
+		 * sure that it isn't in our metadata -- storing to our
+		 * dynamic variable metadata would corrupt our state.  For
+		 * the range to not include any dynamic variable metadata,
+		 * it must:
+		 *
+		 *	(1) Start above the hash table that is at the base of
+		 *	the dynamic variable space
+		 *
+		 *	(2) Have a starting chunk offset that is beyond the
+		 *	dtrace_dynvar_t that is at the base of every chunk
+		 *
+		 *	(3) Not span a chunk boundary
+		 *
+		 *	(4) Not be in the tuple space of a dynamic variable
+		 *
+		 */
+		if (addr < base)
+			return (0);
+
+		chunkoffs = (addr - base) % dstate->dtds_chunksize;
+
+		if (chunkoffs < sizeof (dtrace_dynvar_t))
+			return (0);
+
+		if (chunkoffs + sz > dstate->dtds_chunksize)
+			return (0);
+
+		dvar = (dtrace_dynvar_t *)((uintptr_t)addr - chunkoffs);
+
+		if (dvar->dtdv_hashval == DTRACE_DYNHASH_FREE)
+			return (0);
+
+		if (chunkoffs < sizeof (dtrace_dynvar_t) +
+		    ((dvar->dtdv_tuple.dtt_nkeys - 1) * sizeof (dtrace_key_t)))
+			return (0);
+
+		DTRACE_RANGE_REMAIN(remain, addr, dvar, dstate->dtds_chunksize);
+		return (1);
+	}
+
+	/*
+	 * Finally, check the static local and global variables.  These checks
+	 * take the longest, so we perform them last.
+	 */
+	if (dtrace_canstore_statvar(addr, sz, remain,
+	    vstate->dtvs_locals, vstate->dtvs_nlocals))
+		return (1);
+
+	if (dtrace_canstore_statvar(addr, sz, remain,
+	    vstate->dtvs_globals, vstate->dtvs_nglobals))
+		return (1);
+
+	return (0);
+}
+
+
+/*
+ * Convenience routine to check to see if the address is within a memory
+ * region in which a load may be issued given the user's privilege level;
+ * if not, it sets the appropriate error flags and loads 'addr' into the
+ * illegal value slot.
+ *
+ * DTrace subroutines (DIF_SUBR_*) should use this helper to implement
+ * appropriate memory access protection.
+ */
+static int
+dtrace_canload(uint64_t addr, size_t sz, dtrace_mstate_t *mstate,
+    dtrace_vstate_t *vstate)
+{
+	return (dtrace_canload_remains(addr, sz, NULL, mstate, vstate));
+}
+
+/*
+ * Implementation of dtrace_canload which communicates the uppoer bound of the
+ * allowed memory region.
+ */
+static int
+dtrace_canload_remains(uint64_t addr, size_t sz, size_t *remain,
+    dtrace_mstate_t *mstate, dtrace_vstate_t *vstate)
+{
+	volatile uintptr_t *illval = &cpu_core[curcpu].cpuc_dtrace_illval;
+	file_t *fp;
+
+	/*
+	 * If we hold the privilege to read from kernel memory, then
+	 * everything is readable.
+	 */
+	if ((mstate->dtms_access & DTRACE_ACCESS_KERNEL) != 0) {
+		DTRACE_RANGE_REMAIN(remain, addr, addr, sz);
+		return (1);
+	}
+
+	/*
+	 * You can obviously read that which you can store.
+	 */
+	if (dtrace_canstore_remains(addr, sz, remain, mstate, vstate))
+		return (1);
+
+	/*
+	 * We're allowed to read from our own string table.
+	 */
+	if (DTRACE_INRANGE(addr, sz, mstate->dtms_difo->dtdo_strtab,
+	    mstate->dtms_difo->dtdo_strlen)) {
+		DTRACE_RANGE_REMAIN(remain, addr,
+		    mstate->dtms_difo->dtdo_strtab,
+		    mstate->dtms_difo->dtdo_strlen);
+		return (1);
+	}
+
+	if (vstate->dtvs_state != NULL &&
+	    dtrace_priv_proc(vstate->dtvs_state)) {
+		proc_t *p;
+
+		/*
+		 * When we have privileges to the current process, there are
+		 * several context-related kernel structures that are safe to
+		 * read, even absent the privilege to read from kernel memory.
+		 * These reads are safe because these structures contain only
+		 * state that (1) we're permitted to read, (2) is harmless or
+		 * (3) contains pointers to additional kernel state that we're
+		 * not permitted to read (and as such, do not present an
+		 * opportunity for privilege escalation).  Finally (and
+		 * critically), because of the nature of their relation with
+		 * the current thread context, the memory associated with these
+		 * structures cannot change over the duration of probe context,
+		 * and it is therefore impossible for this memory to be
+		 * deallocated and reallocated as something else while it's
+		 * being operated upon.
+		 */
+		if (DTRACE_INRANGE(addr, sz, curthread, sizeof (kthread_t))) {
+			DTRACE_RANGE_REMAIN(remain, addr, curthread,
+			    sizeof (kthread_t));
+			return (1);
+		}
+
+		if ((p = curthread->t_procp) != NULL && DTRACE_INRANGE(addr,
+		    sz, curthread->t_procp, sizeof (proc_t))) {
+			DTRACE_RANGE_REMAIN(remain, addr, curthread->t_procp,
+			    sizeof (proc_t));
+			return (1);
+		}
+
+		if (curthread->t_cred != NULL && DTRACE_INRANGE(addr, sz,
+		    curthread->t_cred, sizeof (cred_t))) {
+			DTRACE_RANGE_REMAIN(remain, addr, curthread->t_cred,
+			    sizeof (cred_t));
+			return (1);
+		}
+
+#ifdef illumos
+		if (p != NULL && p->p_pidp != NULL && DTRACE_INRANGE(addr, sz,
+		    &(p->p_pidp->pid_id), sizeof (pid_t))) {
+			DTRACE_RANGE_REMAIN(remain, addr, &(p->p_pidp->pid_id),
+			    sizeof (pid_t));
+			return (1);
+		}
+
+		if (curthread->t_cpu != NULL && DTRACE_INRANGE(addr, sz,
+		    curthread->t_cpu, offsetof(cpu_t, cpu_pause_thread))) {
+			DTRACE_RANGE_REMAIN(remain, addr, curthread->t_cpu,
+			    offsetof(cpu_t, cpu_pause_thread));
+			return (1);
+		}
+#endif
+	}
+
+	if ((fp = mstate->dtms_getf) != NULL) {
+		uintptr_t psz = sizeof (void *);
+		vnode_t *vp;
+		vnodeops_t *op;
+
+		/*
+		 * When getf() returns a file_t, the enabling is implicitly
+		 * granted the (transient) right to read the returned file_t
+		 * as well as the v_path and v_op->vnop_name of the underlying
+		 * vnode.  These accesses are allowed after a successful
+		 * getf() because the members that they refer to cannot change
+		 * once set -- and the barrier logic in the kernel's closef()
+		 * path assures that the file_t and its referenced vode_t
+		 * cannot themselves be stale (that is, it impossible for
+		 * either dtms_getf itself or its f_vnode member to reference
+		 * freed memory).
+		 */
+		if (DTRACE_INRANGE(addr, sz, fp, sizeof (file_t))) {
+			DTRACE_RANGE_REMAIN(remain, addr, fp, sizeof (file_t));
+			return (1);
+		}
+
+		if ((vp = fp->f_vnode) != NULL) {
+			size_t slen;
+#ifdef illumos
+			if (DTRACE_INRANGE(addr, sz, &vp->v_path, psz)) {
+				DTRACE_RANGE_REMAIN(remain, addr, &vp->v_path,
+				    psz);
+				return (1);
+			}
+			slen = strlen(vp->v_path) + 1;
+			if (DTRACE_INRANGE(addr, sz, vp->v_path, slen)) {
+				DTRACE_RANGE_REMAIN(remain, addr, vp->v_path,
+				    slen);
+				return (1);
+			}
+#endif
+
+			if (DTRACE_INRANGE(addr, sz, &vp->v_op, psz)) {
+				DTRACE_RANGE_REMAIN(remain, addr, &vp->v_op,
+				    psz);
+				return (1);
+			}
+
+#ifdef illumos
+			if ((op = vp->v_op) != NULL &&
+			    DTRACE_INRANGE(addr, sz, &op->vnop_name, psz)) {
+				DTRACE_RANGE_REMAIN(remain, addr,
+				    &op->vnop_name, psz);
+				return (1);
+			}
+
+			if (op != NULL && op->vnop_name != NULL &&
+			    DTRACE_INRANGE(addr, sz, op->vnop_name,
+			    (slen = strlen(op->vnop_name) + 1))) {
+				DTRACE_RANGE_REMAIN(remain, addr,
+				    op->vnop_name, slen);
+				return (1);
+			}
+#endif
+		}
+	}
+
+	DTRACE_CPUFLAG_SET(CPU_DTRACE_KPRIV);
+	*illval = addr;
+	return (0);
+}
+
+/*
+ * Convenience routine to check to see if a given string is within a memory
+ * region in which a load may be issued given the user's privilege level;
+ * this exists so that we don't need to issue unnecessary dtrace_strlen()
+ * calls in the event that the user has all privileges.
+ */
+static int
+dtrace_strcanload(uint64_t addr, size_t sz, size_t *remain,
+    dtrace_mstate_t *mstate, dtrace_vstate_t *vstate)
+{
+	size_t rsize;
+
+	/*
+	 * If we hold the privilege to read from kernel memory, then
+	 * everything is readable.
+	 */
+	if ((mstate->dtms_access & DTRACE_ACCESS_KERNEL) != 0) {
+		DTRACE_RANGE_REMAIN(remain, addr, addr, sz);
+		return (1);
+	}
+
+	/*
+	 * Even if the caller is uninterested in querying the remaining valid
+	 * range, it is required to ensure that the access is allowed.
+	 */
+	if (remain == NULL) {
+		remain = &rsize;
+	}
+	if (dtrace_canload_remains(addr, 0, remain, mstate, vstate)) {
+		size_t strsz;
+		/*
+		 * Perform the strlen after determining the length of the
+		 * memory region which is accessible.  This prevents timing
+		 * information from being used to find NULs in memory which is
+		 * not accessible to the caller.
+		 */
+		strsz = 1 + dtrace_strlen((char *)(uintptr_t)addr,
+		    MIN(sz, *remain));
+		if (strsz <= *remain) {
+			return (1);
+		}
+	}
+
+	return (0);
+}
+
+/*
+ * Convenience routine to check to see if a given variable is within a memory
+ * region in which a load may be issued given the user's privilege level.
+ */
+static int
+dtrace_vcanload(void *src, dtrace_diftype_t *type, size_t *remain,
+    dtrace_mstate_t *mstate, dtrace_vstate_t *vstate)
+{
+	size_t sz;
+	ASSERT(type->dtdt_flags & DIF_TF_BYREF);
+
+	/*
+	 * Calculate the max size before performing any checks since even
+	 * DTRACE_ACCESS_KERNEL-credentialed callers expect that this function
+	 * return the max length via 'remain'.
+	 */
+	if (type->dtdt_kind == DIF_TYPE_STRING) {
+		dtrace_state_t *state = vstate->dtvs_state;
+
+		if (state != NULL) {
+			sz = state->dts_options[DTRACEOPT_STRSIZE];
+		} else {
+			/*
+			 * In helper context, we have a NULL state; fall back
+			 * to using the system-wide default for the string size
+			 * in this case.
+			 */
+			sz = dtrace_strsize_default;
+		}
+	} else {
+		sz = type->dtdt_size;
+	}
+
+	/*
+	 * If we hold the privilege to read from kernel memory, then
+	 * everything is readable.
+	 */
+	if ((mstate->dtms_access & DTRACE_ACCESS_KERNEL) != 0) {
+		DTRACE_RANGE_REMAIN(remain, (uintptr_t)src, src, sz);
+		return (1);
+	}
+
+	if (type->dtdt_kind == DIF_TYPE_STRING) {
+		return (dtrace_strcanload((uintptr_t)src, sz, remain, mstate,
+		    vstate));
+	}
+	return (dtrace_canload_remains((uintptr_t)src, sz, remain, mstate,
+	    vstate));
+}
+
+/*
+ * Convert a string to a signed integer using safe loads.
+ *
+ * NOTE: This function uses various macros from strtolctype.h to manipulate
+ * digit values, etc -- these have all been checked to ensure they make
+ * no additional function calls.
+ */
+static int64_t
+dtrace_strtoll(char *input, int base, size_t limit)
+{
+	uintptr_t pos = (uintptr_t)input;
+	int64_t val = 0;
+	int x;
+	boolean_t neg = B_FALSE;
+	char c, cc, ccc;
+	uintptr_t end = pos + limit;
+
+	/*
+	 * Consume any whitespace preceding digits.
+	 */
+	while ((c = dtrace_load8(pos)) == ' ' || c == '\t')
+		pos++;
+
+	/*
+	 * Handle an explicit sign if one is present.
+	 */
+	if (c == '-' || c == '+') {
+		if (c == '-')
+			neg = B_TRUE;
+		c = dtrace_load8(++pos);
+	}
+
+	/*
+	 * Check for an explicit hexadecimal prefix ("0x" or "0X") and skip it
+	 * if present.
+	 */
+	if (base == 16 && c == '0' && ((cc = dtrace_load8(pos + 1)) == 'x' ||
+	    cc == 'X') && isxdigit(ccc = dtrace_load8(pos + 2))) {
+		pos += 2;
+		c = ccc;
+	}
+
+	/*
+	 * Read in contiguous digits until the first non-digit character.
+	 */
+	for (; pos < end && c != '\0' && lisalnum(c) && (x = DIGIT(c)) < base;
+	    c = dtrace_load8(++pos))
+		val = val * base + x;
+
+	return (neg ? -val : val);
+}
+
+/*
+ * Compare two strings using safe loads.
+ */
+static int
+dtrace_strncmp(char *s1, char *s2, size_t limit)
+{
+	uint8_t c1, c2;
+	volatile uint16_t *flags;
+
+	if (s1 == s2 || limit == 0)
+		return (0);
+
+	flags = (volatile uint16_t *)&cpu_core[curcpu].cpuc_dtrace_flags;
+
+	do {
+		if (s1 == NULL) {
+			c1 = '\0';
+		} else {
+			c1 = dtrace_load8((uintptr_t)s1++);
+		}
+
+		if (s2 == NULL) {
+			c2 = '\0';
+		} else {
+			c2 = dtrace_load8((uintptr_t)s2++);
+		}
+
+		if (c1 != c2)
+			return (c1 - c2);
+	} while (--limit && c1 != '\0' && !(*flags & CPU_DTRACE_FAULT));
+
+	return (0);
+}
+
+/*
+ * Compute strlen(s) for a string using safe memory accesses.  The additional
+ * len parameter is used to specify a maximum length to ensure completion.
+ */
+static size_t
+dtrace_strlen(const char *s, size_t lim)
+{
+	uint_t len;
+
+	for (len = 0; len != lim; len++) {
+		if (dtrace_load8((uintptr_t)s++) == '\0')
+			break;
+	}
+
+	return (len);
 }
 
 static void
