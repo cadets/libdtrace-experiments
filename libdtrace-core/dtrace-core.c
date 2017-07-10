@@ -2003,6 +2003,11 @@ dtrace_action_stop(void)
 static void
 dtrace_action_chill(dtrace_mstate_t *mstate, hrtime_t val)
 {
+	/*
+	 * XXX: Is this... sufficient?
+	 */
+	sleep(val);
+#if 0
 	hrtime_t now;
 	volatile uint16_t *flags;
 #ifdef illumos
@@ -2047,12 +2052,18 @@ dtrace_action_chill(dtrace_mstate_t *mstate, hrtime_t val)
 	 */
 	mstate->dtms_present &= ~DTRACE_MSTATE_TIMESTAMP;
 	cpu->cpu_dtrace_chilled += val;
+#endif
 }
 
 static void
 dtrace_action_ustack(dtrace_mstate_t *mstate, dtrace_state_t *state,
     uint64_t *buf, uint64_t arg)
 {
+	/*
+	 * TODO: Here we probably want to make use of the CTF data, keep some
+	 * state or even a debugger!
+	 */
+#if 0
 	int nframes = DTRACE_USTACK_NFRAMES(arg);
 	int strsize = DTRACE_USTACK_STRSIZE(arg);
 	uint64_t *pcs = &buf[1], *fps;
@@ -2167,6 +2178,7 @@ dtrace_action_ustack(dtrace_mstate_t *mstate, dtrace_state_t *state,
 
 out:
 	mstate->dtms_scratch_ptr = old;
+#endif
 }
 
 /*
