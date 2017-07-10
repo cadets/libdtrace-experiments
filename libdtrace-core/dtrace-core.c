@@ -1023,6 +1023,19 @@ dtrace_predicate_hold(dtrace_predicate_t *pred)
 }
 
 /*
+ * Note:  called from probe context.  This function just increments the drop
+ * count on a buffer.  It has been made a function to allow for the
+ * possibility of understanding the source of mysterious drop counts.  (A
+ * problem for which one may be particularly disappointed that DTrace cannot
+ * be used to understand DTrace.)
+ */
+static void
+dtrace_buffer_drop(dtrace_buffer_t *buf)
+{
+	buf->dtb_drops++;
+}
+
+/*
  * Note:  called from probe context.  This function is called to reserve space
  * in a buffer.  If mstate is non-NULL, sets the scratch base and size in the
  * mstate.  Returns the new offset in the buffer, or a negative value if an
