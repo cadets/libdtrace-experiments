@@ -4826,6 +4826,1868 @@ dtrace_dif_variable(dtrace_mstate_t *mstate, dtrace_state_t *state, uint64_t v,
 }
 
 /*
+ * Emulate the execution of DTrace ID subroutines invoked by the call opcode.
+ * Notice that we don't bother validating the proper number of arguments or
+ * their types in the tuple stack.  This isn't needed because all argument
+ * interpretation is safe because of our load safety -- the worst that can
+ * happen is that a bogus program can obtain bogus results.
+ */
+static void
+dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
+    dtrace_key_t *tupregs, int nargs,
+    dtrace_mstate_t *mstate, dtrace_state_t *state)
+{
+	volatile uint16_t *flags = &cpu_core[curcpu].cpuc_dtrace_flags;
+	volatile uintptr_t *illval = &cpu_core[curcpu].cpuc_dtrace_illval;
+	dtrace_vstate_t *vstate = &state->dts_vstate;
+
+#ifdef illumos
+	union {
+		mutex_impl_t mi;
+		uint64_t mx;
+	} m;
+
+	union {
+		krwlock_t ri;
+		uintptr_t rw;
+	} r;
+#else
+	struct thread *lowner;
+	union {
+		struct lock_object *li;
+		uintptr_t lx;
+	} l;
+#endif
+
+	switch (subr) {
+	case DIF_SUBR_RAND:
+		regs[rd] = dtrace_xoroshiro128_plus_next(
+		    state->dts_rstate[curcpu]);
+		break;
+
+#ifdef illumos
+	case DIF_SUBR_MUTEX_OWNED:
+		if (!dtrace_canload(tupregs[0].dttk_value, sizeof (kmutex_t),
+		    mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		m.mx = dtrace_load64(tupregs[0].dttk_value);
+		if (MUTEX_TYPE_ADAPTIVE(&m.mi))
+			regs[rd] = MUTEX_OWNER(&m.mi) != MUTEX_NO_OWNER;
+		else
+			regs[rd] = LOCK_HELD(&m.mi.m_spin.m_spinlock);
+		break;
+
+	case DIF_SUBR_MUTEX_OWNER:
+		if (!dtrace_canload(tupregs[0].dttk_value, sizeof (kmutex_t),
+		    mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		m.mx = dtrace_load64(tupregs[0].dttk_value);
+		if (MUTEX_TYPE_ADAPTIVE(&m.mi) &&
+		    MUTEX_OWNER(&m.mi) != MUTEX_NO_OWNER)
+			regs[rd] = (uintptr_t)MUTEX_OWNER(&m.mi);
+		else
+			regs[rd] = 0;
+		break;
+
+	case DIF_SUBR_MUTEX_TYPE_ADAPTIVE:
+		if (!dtrace_canload(tupregs[0].dttk_value, sizeof (kmutex_t),
+		    mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		m.mx = dtrace_load64(tupregs[0].dttk_value);
+		regs[rd] = MUTEX_TYPE_ADAPTIVE(&m.mi);
+		break;
+
+	case DIF_SUBR_MUTEX_TYPE_SPIN:
+		if (!dtrace_canload(tupregs[0].dttk_value, sizeof (kmutex_t),
+		    mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		m.mx = dtrace_load64(tupregs[0].dttk_value);
+		regs[rd] = MUTEX_TYPE_SPIN(&m.mi);
+		break;
+
+	case DIF_SUBR_RW_READ_HELD: {
+		uintptr_t tmp;
+
+		if (!dtrace_canload(tupregs[0].dttk_value, sizeof (uintptr_t),
+		    mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		r.rw = dtrace_loadptr(tupregs[0].dttk_value);
+		regs[rd] = _RW_READ_HELD(&r.ri, tmp);
+		break;
+	}
+
+	case DIF_SUBR_RW_WRITE_HELD:
+		if (!dtrace_canload(tupregs[0].dttk_value, sizeof (krwlock_t),
+		    mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		r.rw = dtrace_loadptr(tupregs[0].dttk_value);
+		regs[rd] = _RW_WRITE_HELD(&r.ri);
+		break;
+
+	case DIF_SUBR_RW_ISWRITER:
+		if (!dtrace_canload(tupregs[0].dttk_value, sizeof (krwlock_t),
+		    mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		r.rw = dtrace_loadptr(tupregs[0].dttk_value);
+		regs[rd] = _RW_ISWRITER(&r.ri);
+		break;
+
+#else /* !illumos */
+	case DIF_SUBR_MUTEX_OWNED:
+		if (!dtrace_canload(tupregs[0].dttk_value,
+			sizeof (struct lock_object), mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+		l.lx = dtrace_loadptr((uintptr_t)&tupregs[0].dttk_value);
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+		regs[rd] = LOCK_CLASS(l.li)->lc_owner(l.li, &lowner);
+		DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+		break;
+
+	case DIF_SUBR_MUTEX_OWNER:
+		if (!dtrace_canload(tupregs[0].dttk_value,
+			sizeof (struct lock_object), mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+		l.lx = dtrace_loadptr((uintptr_t)&tupregs[0].dttk_value);
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+		LOCK_CLASS(l.li)->lc_owner(l.li, &lowner);
+		DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+		regs[rd] = (uintptr_t)lowner;
+		break;
+
+	case DIF_SUBR_MUTEX_TYPE_ADAPTIVE:
+		if (!dtrace_canload(tupregs[0].dttk_value, sizeof (struct mtx),
+		    mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+		l.lx = dtrace_loadptr((uintptr_t)&tupregs[0].dttk_value);
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+		regs[rd] = (LOCK_CLASS(l.li)->lc_flags & LC_SLEEPLOCK) != 0;
+		DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+		break;
+
+	case DIF_SUBR_MUTEX_TYPE_SPIN:
+		if (!dtrace_canload(tupregs[0].dttk_value, sizeof (struct mtx),
+		    mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+		l.lx = dtrace_loadptr((uintptr_t)&tupregs[0].dttk_value);
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+		regs[rd] = (LOCK_CLASS(l.li)->lc_flags & LC_SPINLOCK) != 0;
+		DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+		break;
+
+	case DIF_SUBR_RW_READ_HELD: 
+	case DIF_SUBR_SX_SHARED_HELD: 
+		if (!dtrace_canload(tupregs[0].dttk_value, sizeof (uintptr_t),
+		    mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+		l.lx = dtrace_loadptr((uintptr_t)&tupregs[0].dttk_value);
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+		regs[rd] = LOCK_CLASS(l.li)->lc_owner(l.li, &lowner) &&
+		    lowner == NULL;
+		DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+		break;
+
+	case DIF_SUBR_RW_WRITE_HELD:
+	case DIF_SUBR_SX_EXCLUSIVE_HELD:
+		if (!dtrace_canload(tupregs[0].dttk_value, sizeof (uintptr_t),
+		    mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+		l.lx = dtrace_loadptr(tupregs[0].dttk_value);
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+		regs[rd] = LOCK_CLASS(l.li)->lc_owner(l.li, &lowner) &&
+		    lowner != NULL;
+		DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+		break;
+
+	case DIF_SUBR_RW_ISWRITER:
+	case DIF_SUBR_SX_ISEXCLUSIVE:
+		if (!dtrace_canload(tupregs[0].dttk_value, sizeof (uintptr_t),
+		    mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+		l.lx = dtrace_loadptr(tupregs[0].dttk_value);
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+		LOCK_CLASS(l.li)->lc_owner(l.li, &lowner);
+		DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+		regs[rd] = (lowner == curthread);
+		break;
+#endif /* illumos */
+
+	case DIF_SUBR_BCOPY: {
+		/*
+		 * We need to be sure that the destination is in the scratch
+		 * region -- no other region is allowed.
+		 */
+		uintptr_t src = tupregs[0].dttk_value;
+		uintptr_t dest = tupregs[1].dttk_value;
+		size_t size = tupregs[2].dttk_value;
+
+		if (!dtrace_inscratch(dest, size, mstate)) {
+			*flags |= CPU_DTRACE_BADADDR;
+			*illval = regs[rd];
+			break;
+		}
+
+		if (!dtrace_canload(src, size, mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		dtrace_bcopy((void *)src, (void *)dest, size);
+		break;
+	}
+
+	case DIF_SUBR_ALLOCA:
+	case DIF_SUBR_COPYIN: {
+		uintptr_t dest = P2ROUNDUP(mstate->dtms_scratch_ptr, 8);
+		uint64_t size =
+		    tupregs[subr == DIF_SUBR_ALLOCA ? 0 : 1].dttk_value;
+		size_t scratch_size = (dest - mstate->dtms_scratch_ptr) + size;
+
+		/*
+		 * This action doesn't require any credential checks since
+		 * probes will not activate in user contexts to which the
+		 * enabling user does not have permissions.
+		 */
+
+		/*
+		 * Rounding up the user allocation size could have overflowed
+		 * a large, bogus allocation (like -1ULL) to 0.
+		 */
+		if (scratch_size < size ||
+		    !DTRACE_INSCRATCH(mstate, scratch_size)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+			regs[rd] = 0;
+			break;
+		}
+
+		if (subr == DIF_SUBR_COPYIN) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+			dtrace_copyin(tupregs[0].dttk_value, dest, size, flags);
+			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+		}
+
+		mstate->dtms_scratch_ptr += scratch_size;
+		regs[rd] = dest;
+		break;
+	}
+
+	case DIF_SUBR_COPYINTO: {
+		uint64_t size = tupregs[1].dttk_value;
+		uintptr_t dest = tupregs[2].dttk_value;
+
+		/*
+		 * This action doesn't require any credential checks since
+		 * probes will not activate in user contexts to which the
+		 * enabling user does not have permissions.
+		 */
+		if (!dtrace_inscratch(dest, size, mstate)) {
+			*flags |= CPU_DTRACE_BADADDR;
+			*illval = regs[rd];
+			break;
+		}
+
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+		dtrace_copyin(tupregs[0].dttk_value, dest, size, flags);
+		DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+		break;
+	}
+
+	case DIF_SUBR_COPYINSTR: {
+		uintptr_t dest = mstate->dtms_scratch_ptr;
+		uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+
+		if (nargs > 1 && tupregs[1].dttk_value < size)
+			size = tupregs[1].dttk_value + 1;
+
+		/*
+		 * This action doesn't require any credential checks since
+		 * probes will not activate in user contexts to which the
+		 * enabling user does not have permissions.
+		 */
+		if (!DTRACE_INSCRATCH(mstate, size)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+			regs[rd] = 0;
+			break;
+		}
+
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+		dtrace_copyinstr(tupregs[0].dttk_value, dest, size, flags);
+		DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+
+		((char *)dest)[size - 1] = '\0';
+		mstate->dtms_scratch_ptr += size;
+		regs[rd] = dest;
+		break;
+	}
+
+#ifdef illumos
+	case DIF_SUBR_MSGSIZE:
+	case DIF_SUBR_MSGDSIZE: {
+		uintptr_t baddr = tupregs[0].dttk_value, daddr;
+		uintptr_t wptr, rptr;
+		size_t count = 0;
+		int cont = 0;
+
+		while (baddr != 0 && !(*flags & CPU_DTRACE_FAULT)) {
+
+			if (!dtrace_canload(baddr, sizeof (mblk_t), mstate,
+			    vstate)) {
+				regs[rd] = 0;
+				break;
+			}
+
+			wptr = dtrace_loadptr(baddr +
+			    offsetof(mblk_t, b_wptr));
+
+			rptr = dtrace_loadptr(baddr +
+			    offsetof(mblk_t, b_rptr));
+
+			if (wptr < rptr) {
+				*flags |= CPU_DTRACE_BADADDR;
+				*illval = tupregs[0].dttk_value;
+				break;
+			}
+
+			daddr = dtrace_loadptr(baddr +
+			    offsetof(mblk_t, b_datap));
+
+			baddr = dtrace_loadptr(baddr +
+			    offsetof(mblk_t, b_cont));
+
+			/*
+			 * We want to prevent against denial-of-service here,
+			 * so we're only going to search the list for
+			 * dtrace_msgdsize_max mblks.
+			 */
+			if (cont++ > dtrace_msgdsize_max) {
+				*flags |= CPU_DTRACE_ILLOP;
+				break;
+			}
+
+			if (subr == DIF_SUBR_MSGDSIZE) {
+				if (dtrace_load8(daddr +
+				    offsetof(dblk_t, db_type)) != M_DATA)
+					continue;
+			}
+
+			count += wptr - rptr;
+		}
+
+		if (!(*flags & CPU_DTRACE_FAULT))
+			regs[rd] = count;
+
+		break;
+	}
+#endif
+
+	case DIF_SUBR_PROGENYOF: {
+		pid_t pid = tupregs[0].dttk_value;
+		proc_t *p;
+		int rval = 0;
+
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+
+		for (p = curthread->t_procp; p != NULL; p = p->p_parent) {
+#ifdef illumos
+			if (p->p_pidp->pid_id == pid) {
+#else
+			if (p->p_pid == pid) {
+#endif
+				rval = 1;
+				break;
+			}
+		}
+
+		DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+
+		regs[rd] = rval;
+		break;
+	}
+
+	case DIF_SUBR_SPECULATION:
+		regs[rd] = dtrace_speculation(state);
+		break;
+
+	case DIF_SUBR_COPYOUT: {
+		uintptr_t kaddr = tupregs[0].dttk_value;
+		uintptr_t uaddr = tupregs[1].dttk_value;
+		uint64_t size = tupregs[2].dttk_value;
+
+		if (!dtrace_destructive_disallow &&
+		    dtrace_priv_proc_control(state) &&
+		    !dtrace_istoxic(kaddr, size) &&
+		    dtrace_canload(kaddr, size, mstate, vstate)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+			dtrace_copyout(kaddr, uaddr, size, flags);
+			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+		}
+		break;
+	}
+
+	case DIF_SUBR_COPYOUTSTR: {
+		uintptr_t kaddr = tupregs[0].dttk_value;
+		uintptr_t uaddr = tupregs[1].dttk_value;
+		uint64_t size = tupregs[2].dttk_value;
+		size_t lim;
+
+		if (!dtrace_destructive_disallow &&
+		    dtrace_priv_proc_control(state) &&
+		    !dtrace_istoxic(kaddr, size) &&
+		    dtrace_strcanload(kaddr, size, &lim, mstate, vstate)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+			dtrace_copyoutstr(kaddr, uaddr, lim, flags);
+			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+		}
+		break;
+	}
+
+	case DIF_SUBR_STRLEN: {
+		size_t size = state->dts_options[DTRACEOPT_STRSIZE];
+		uintptr_t addr = (uintptr_t)tupregs[0].dttk_value;
+		size_t lim;
+
+		if (!dtrace_strcanload(addr, size, &lim, mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		regs[rd] = dtrace_strlen((char *)addr, lim);
+		break;
+	}
+
+	case DIF_SUBR_STRCHR:
+	case DIF_SUBR_STRRCHR: {
+		/*
+		 * We're going to iterate over the string looking for the
+		 * specified character.  We will iterate until we have reached
+		 * the string length or we have found the character.  If this
+		 * is DIF_SUBR_STRRCHR, we will look for the last occurrence
+		 * of the specified character instead of the first.
+		 */
+		uintptr_t addr = tupregs[0].dttk_value;
+		uintptr_t addr_limit;
+		uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+		size_t lim;
+		char c, target = (char)tupregs[1].dttk_value;
+
+		if (!dtrace_strcanload(addr, size, &lim, mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+		addr_limit = addr + lim;
+
+		for (regs[rd] = 0; addr < addr_limit; addr++) {
+			if ((c = dtrace_load8(addr)) == target) {
+				regs[rd] = addr;
+
+				if (subr == DIF_SUBR_STRCHR)
+					break;
+			}
+
+			if (c == '\0')
+				break;
+		}
+		break;
+	}
+
+	case DIF_SUBR_STRSTR:
+	case DIF_SUBR_INDEX:
+	case DIF_SUBR_RINDEX: {
+		/*
+		 * We're going to iterate over the string looking for the
+		 * specified string.  We will iterate until we have reached
+		 * the string length or we have found the string.  (Yes, this
+		 * is done in the most naive way possible -- but considering
+		 * that the string we're searching for is likely to be
+		 * relatively short, the complexity of Rabin-Karp or similar
+		 * hardly seems merited.)
+		 */
+		char *addr = (char *)(uintptr_t)tupregs[0].dttk_value;
+		char *substr = (char *)(uintptr_t)tupregs[1].dttk_value;
+		uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+		size_t len = dtrace_strlen(addr, size);
+		size_t sublen = dtrace_strlen(substr, size);
+		char *limit = addr + len, *orig = addr;
+		int notfound = subr == DIF_SUBR_STRSTR ? 0 : -1;
+		int inc = 1;
+
+		regs[rd] = notfound;
+
+		if (!dtrace_canload((uintptr_t)addr, len + 1, mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		if (!dtrace_canload((uintptr_t)substr, sublen + 1, mstate,
+		    vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		/*
+		 * strstr() and index()/rindex() have similar semantics if
+		 * both strings are the empty string: strstr() returns a
+		 * pointer to the (empty) string, and index() and rindex()
+		 * both return index 0 (regardless of any position argument).
+		 */
+		if (sublen == 0 && len == 0) {
+			if (subr == DIF_SUBR_STRSTR)
+				regs[rd] = (uintptr_t)addr;
+			else
+				regs[rd] = 0;
+			break;
+		}
+
+		if (subr != DIF_SUBR_STRSTR) {
+			if (subr == DIF_SUBR_RINDEX) {
+				limit = orig - 1;
+				addr += len;
+				inc = -1;
+			}
+
+			/*
+			 * Both index() and rindex() take an optional position
+			 * argument that denotes the starting position.
+			 */
+			if (nargs == 3) {
+				int64_t pos = (int64_t)tupregs[2].dttk_value;
+
+				/*
+				 * If the position argument to index() is
+				 * negative, Perl implicitly clamps it at
+				 * zero.  This semantic is a little surprising
+				 * given the special meaning of negative
+				 * positions to similar Perl functions like
+				 * substr(), but it appears to reflect a
+				 * notion that index() can start from a
+				 * negative index and increment its way up to
+				 * the string.  Given this notion, Perl's
+				 * rindex() is at least self-consistent in
+				 * that it implicitly clamps positions greater
+				 * than the string length to be the string
+				 * length.  Where Perl completely loses
+				 * coherence, however, is when the specified
+				 * substring is the empty string ("").  In
+				 * this case, even if the position is
+				 * negative, rindex() returns 0 -- and even if
+				 * the position is greater than the length,
+				 * index() returns the string length.  These
+				 * semantics violate the notion that index()
+				 * should never return a value less than the
+				 * specified position and that rindex() should
+				 * never return a value greater than the
+				 * specified position.  (One assumes that
+				 * these semantics are artifacts of Perl's
+				 * implementation and not the results of
+				 * deliberate design -- it beggars belief that
+				 * even Larry Wall could desire such oddness.)
+				 * While in the abstract one would wish for
+				 * consistent position semantics across
+				 * substr(), index() and rindex() -- or at the
+				 * very least self-consistent position
+				 * semantics for index() and rindex() -- we
+				 * instead opt to keep with the extant Perl
+				 * semantics, in all their broken glory.  (Do
+				 * we have more desire to maintain Perl's
+				 * semantics than Perl does?  Probably.)
+				 */
+				if (subr == DIF_SUBR_RINDEX) {
+					if (pos < 0) {
+						if (sublen == 0)
+							regs[rd] = 0;
+						break;
+					}
+
+					if (pos > len)
+						pos = len;
+				} else {
+					if (pos < 0)
+						pos = 0;
+
+					if (pos >= len) {
+						if (sublen == 0)
+							regs[rd] = len;
+						break;
+					}
+				}
+
+				addr = orig + pos;
+			}
+		}
+
+		for (regs[rd] = notfound; addr != limit; addr += inc) {
+			if (dtrace_strncmp(addr, substr, sublen) == 0) {
+				if (subr != DIF_SUBR_STRSTR) {
+					/*
+					 * As D index() and rindex() are
+					 * modeled on Perl (and not on awk),
+					 * we return a zero-based (and not a
+					 * one-based) index.  (For you Perl
+					 * weenies: no, we're not going to add
+					 * $[ -- and shouldn't you be at a con
+					 * or something?)
+					 */
+					regs[rd] = (uintptr_t)(addr - orig);
+					break;
+				}
+
+				ASSERT(subr == DIF_SUBR_STRSTR);
+				regs[rd] = (uintptr_t)addr;
+				break;
+			}
+		}
+
+		break;
+	}
+
+	case DIF_SUBR_STRTOK: {
+		uintptr_t addr = tupregs[0].dttk_value;
+		uintptr_t tokaddr = tupregs[1].dttk_value;
+		uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+		uintptr_t limit, toklimit;
+		size_t clim;
+		uint8_t c = 0, tokmap[32];	 /* 256 / 8 */
+		char *dest = (char *)mstate->dtms_scratch_ptr;
+		int i;
+
+		/*
+		 * Check both the token buffer and (later) the input buffer,
+		 * since both could be non-scratch addresses.
+		 */
+		if (!dtrace_strcanload(tokaddr, size, &clim, mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+		toklimit = tokaddr + clim;
+
+		if (!DTRACE_INSCRATCH(mstate, size)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+			regs[rd] = 0;
+			break;
+		}
+
+		if (addr == 0) {
+			/*
+			 * If the address specified is NULL, we use our saved
+			 * strtok pointer from the mstate.  Note that this
+			 * means that the saved strtok pointer is _only_
+			 * valid within multiple enablings of the same probe --
+			 * it behaves like an implicit clause-local variable.
+			 */
+			addr = mstate->dtms_strtok;
+			limit = mstate->dtms_strtok_limit;
+		} else {
+			/*
+			 * If the user-specified address is non-NULL we must
+			 * access check it.  This is the only time we have
+			 * a chance to do so, since this address may reside
+			 * in the string table of this clause-- future calls
+			 * (when we fetch addr from mstate->dtms_strtok)
+			 * would fail this access check.
+			 */
+			if (!dtrace_strcanload(addr, size, &clim, mstate,
+			    vstate)) {
+				regs[rd] = 0;
+				break;
+			}
+			limit = addr + clim;
+		}
+
+		/*
+		 * First, zero the token map, and then process the token
+		 * string -- setting a bit in the map for every character
+		 * found in the token string.
+		 */
+		for (i = 0; i < sizeof (tokmap); i++)
+			tokmap[i] = 0;
+
+		for (; tokaddr < toklimit; tokaddr++) {
+			if ((c = dtrace_load8(tokaddr)) == '\0')
+				break;
+
+			ASSERT((c >> 3) < sizeof (tokmap));
+			tokmap[c >> 3] |= (1 << (c & 0x7));
+		}
+
+		for (; addr < limit; addr++) {
+			/*
+			 * We're looking for a character that is _not_
+			 * contained in the token string.
+			 */
+			if ((c = dtrace_load8(addr)) == '\0')
+				break;
+
+			if (!(tokmap[c >> 3] & (1 << (c & 0x7))))
+				break;
+		}
+
+		if (c == '\0') {
+			/*
+			 * We reached the end of the string without finding
+			 * any character that was not in the token string.
+			 * We return NULL in this case, and we set the saved
+			 * address to NULL as well.
+			 */
+			regs[rd] = 0;
+			mstate->dtms_strtok = 0;
+			mstate->dtms_strtok_limit = 0;
+			break;
+		}
+
+		/*
+		 * From here on, we're copying into the destination string.
+		 */
+		for (i = 0; addr < limit && i < size - 1; addr++) {
+			if ((c = dtrace_load8(addr)) == '\0')
+				break;
+
+			if (tokmap[c >> 3] & (1 << (c & 0x7)))
+				break;
+
+			ASSERT(i < size);
+			dest[i++] = c;
+		}
+
+		ASSERT(i < size);
+		dest[i] = '\0';
+		regs[rd] = (uintptr_t)dest;
+		mstate->dtms_scratch_ptr += size;
+		mstate->dtms_strtok = addr;
+		mstate->dtms_strtok_limit = limit;
+		break;
+	}
+
+	case DIF_SUBR_SUBSTR: {
+		uintptr_t s = tupregs[0].dttk_value;
+		uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+		char *d = (char *)mstate->dtms_scratch_ptr;
+		int64_t index = (int64_t)tupregs[1].dttk_value;
+		int64_t remaining = (int64_t)tupregs[2].dttk_value;
+		size_t len = dtrace_strlen((char *)s, size);
+		int64_t i;
+
+		if (!dtrace_canload(s, len + 1, mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		if (!DTRACE_INSCRATCH(mstate, size)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+			regs[rd] = 0;
+			break;
+		}
+
+		if (nargs <= 2)
+			remaining = (int64_t)size;
+
+		if (index < 0) {
+			index += len;
+
+			if (index < 0 && index + remaining > 0) {
+				remaining += index;
+				index = 0;
+			}
+		}
+
+		if (index >= len || index < 0) {
+			remaining = 0;
+		} else if (remaining < 0) {
+			remaining += len - index;
+		} else if (index + remaining > size) {
+			remaining = size - index;
+		}
+
+		for (i = 0; i < remaining; i++) {
+			if ((d[i] = dtrace_load8(s + index + i)) == '\0')
+				break;
+		}
+
+		d[i] = '\0';
+
+		mstate->dtms_scratch_ptr += size;
+		regs[rd] = (uintptr_t)d;
+		break;
+	}
+
+	case DIF_SUBR_JSON: {
+		uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+		uintptr_t json = tupregs[0].dttk_value;
+		size_t jsonlen = dtrace_strlen((char *)json, size);
+		uintptr_t elem = tupregs[1].dttk_value;
+		size_t elemlen = dtrace_strlen((char *)elem, size);
+
+		char *dest = (char *)mstate->dtms_scratch_ptr;
+		char *elemlist = (char *)mstate->dtms_scratch_ptr + jsonlen + 1;
+		char *ee = elemlist;
+		int nelems = 1;
+		uintptr_t cur;
+
+		if (!dtrace_canload(json, jsonlen + 1, mstate, vstate) ||
+		    !dtrace_canload(elem, elemlen + 1, mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		if (!DTRACE_INSCRATCH(mstate, jsonlen + 1 + elemlen + 1)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+			regs[rd] = 0;
+			break;
+		}
+
+		/*
+		 * Read the element selector and split it up into a packed list
+		 * of strings.
+		 */
+		for (cur = elem; cur < elem + elemlen; cur++) {
+			char cc = dtrace_load8(cur);
+
+			if (cur == elem && cc == '[') {
+				/*
+				 * If the first element selector key is
+				 * actually an array index then ignore the
+				 * bracket.
+				 */
+				continue;
+			}
+
+			if (cc == ']')
+				continue;
+
+			if (cc == '.' || cc == '[') {
+				nelems++;
+				cc = '\0';
+			}
+
+			*ee++ = cc;
+		}
+		*ee++ = '\0';
+
+		if ((regs[rd] = (uintptr_t)dtrace_json(size, json, elemlist,
+		    nelems, dest)) != 0)
+			mstate->dtms_scratch_ptr += jsonlen + 1;
+		break;
+	}
+
+	case DIF_SUBR_TOUPPER:
+	case DIF_SUBR_TOLOWER: {
+		uintptr_t s = tupregs[0].dttk_value;
+		uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+		char *dest = (char *)mstate->dtms_scratch_ptr, c;
+		size_t len = dtrace_strlen((char *)s, size);
+		char lower, upper, convert;
+		int64_t i;
+
+		if (subr == DIF_SUBR_TOUPPER) {
+			lower = 'a';
+			upper = 'z';
+			convert = 'A';
+		} else {
+			lower = 'A';
+			upper = 'Z';
+			convert = 'a';
+		}
+
+		if (!dtrace_canload(s, len + 1, mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		if (!DTRACE_INSCRATCH(mstate, size)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+			regs[rd] = 0;
+			break;
+		}
+
+		for (i = 0; i < size - 1; i++) {
+			if ((c = dtrace_load8(s + i)) == '\0')
+				break;
+
+			if (c >= lower && c <= upper)
+				c = convert + (c - lower);
+
+			dest[i] = c;
+		}
+
+		ASSERT(i < size);
+		dest[i] = '\0';
+		regs[rd] = (uintptr_t)dest;
+		mstate->dtms_scratch_ptr += size;
+		break;
+	}
+
+#ifdef illumos
+	case DIF_SUBR_GETMAJOR:
+#ifdef _LP64
+		regs[rd] = (tupregs[0].dttk_value >> NBITSMINOR64) & MAXMAJ64;
+#else
+		regs[rd] = (tupregs[0].dttk_value >> NBITSMINOR) & MAXMAJ;
+#endif
+		break;
+
+	case DIF_SUBR_GETMINOR:
+#ifdef _LP64
+		regs[rd] = tupregs[0].dttk_value & MAXMIN64;
+#else
+		regs[rd] = tupregs[0].dttk_value & MAXMIN;
+#endif
+		break;
+
+	case DIF_SUBR_DDI_PATHNAME: {
+		/*
+		 * This one is a galactic mess.  We are going to roughly
+		 * emulate ddi_pathname(), but it's made more complicated
+		 * by the fact that we (a) want to include the minor name and
+		 * (b) must proceed iteratively instead of recursively.
+		 */
+		uintptr_t dest = mstate->dtms_scratch_ptr;
+		uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+		char *start = (char *)dest, *end = start + size - 1;
+		uintptr_t daddr = tupregs[0].dttk_value;
+		int64_t minor = (int64_t)tupregs[1].dttk_value;
+		char *s;
+		int i, len, depth = 0;
+
+		/*
+		 * Due to all the pointer jumping we do and context we must
+		 * rely upon, we just mandate that the user must have kernel
+		 * read privileges to use this routine.
+		 */
+		if ((mstate->dtms_access & DTRACE_ACCESS_KERNEL) == 0) {
+			*flags |= CPU_DTRACE_KPRIV;
+			*illval = daddr;
+			regs[rd] = 0;
+		}
+
+		if (!DTRACE_INSCRATCH(mstate, size)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+			regs[rd] = 0;
+			break;
+		}
+
+		*end = '\0';
+
+		/*
+		 * We want to have a name for the minor.  In order to do this,
+		 * we need to walk the minor list from the devinfo.  We want
+		 * to be sure that we don't infinitely walk a circular list,
+		 * so we check for circularity by sending a scout pointer
+		 * ahead two elements for every element that we iterate over;
+		 * if the list is circular, these will ultimately point to the
+		 * same element.  You may recognize this little trick as the
+		 * answer to a stupid interview question -- one that always
+		 * seems to be asked by those who had to have it laboriously
+		 * explained to them, and who can't even concisely describe
+		 * the conditions under which one would be forced to resort to
+		 * this technique.  Needless to say, those conditions are
+		 * found here -- and probably only here.  Is this the only use
+		 * of this infamous trick in shipping, production code?  If it
+		 * isn't, it probably should be...
+		 */
+		if (minor != -1) {
+			uintptr_t maddr = dtrace_loadptr(daddr +
+			    offsetof(struct dev_info, devi_minor));
+
+			uintptr_t next = offsetof(struct ddi_minor_data, next);
+			uintptr_t name = offsetof(struct ddi_minor_data,
+			    d_minor) + offsetof(struct ddi_minor, name);
+			uintptr_t dev = offsetof(struct ddi_minor_data,
+			    d_minor) + offsetof(struct ddi_minor, dev);
+			uintptr_t scout;
+
+			if (maddr != NULL)
+				scout = dtrace_loadptr(maddr + next);
+
+			while (maddr != NULL && !(*flags & CPU_DTRACE_FAULT)) {
+				uint64_t m;
+#ifdef _LP64
+				m = dtrace_load64(maddr + dev) & MAXMIN64;
+#else
+				m = dtrace_load32(maddr + dev) & MAXMIN;
+#endif
+				if (m != minor) {
+					maddr = dtrace_loadptr(maddr + next);
+
+					if (scout == NULL)
+						continue;
+
+					scout = dtrace_loadptr(scout + next);
+
+					if (scout == NULL)
+						continue;
+
+					scout = dtrace_loadptr(scout + next);
+
+					if (scout == NULL)
+						continue;
+
+					if (scout == maddr) {
+						*flags |= CPU_DTRACE_ILLOP;
+						break;
+					}
+
+					continue;
+				}
+
+				/*
+				 * We have the minor data.  Now we need to
+				 * copy the minor's name into the end of the
+				 * pathname.
+				 */
+				s = (char *)dtrace_loadptr(maddr + name);
+				len = dtrace_strlen(s, size);
+
+				if (*flags & CPU_DTRACE_FAULT)
+					break;
+
+				if (len != 0) {
+					if ((end -= (len + 1)) < start)
+						break;
+
+					*end = ':';
+				}
+
+				for (i = 1; i <= len; i++)
+					end[i] = dtrace_load8((uintptr_t)s++);
+				break;
+			}
+		}
+
+		while (daddr != NULL && !(*flags & CPU_DTRACE_FAULT)) {
+			ddi_node_state_t devi_state;
+
+			devi_state = dtrace_load32(daddr +
+			    offsetof(struct dev_info, devi_node_state));
+
+			if (*flags & CPU_DTRACE_FAULT)
+				break;
+
+			if (devi_state >= DS_INITIALIZED) {
+				s = (char *)dtrace_loadptr(daddr +
+				    offsetof(struct dev_info, devi_addr));
+				len = dtrace_strlen(s, size);
+
+				if (*flags & CPU_DTRACE_FAULT)
+					break;
+
+				if (len != 0) {
+					if ((end -= (len + 1)) < start)
+						break;
+
+					*end = '@';
+				}
+
+				for (i = 1; i <= len; i++)
+					end[i] = dtrace_load8((uintptr_t)s++);
+			}
+
+			/*
+			 * Now for the node name...
+			 */
+			s = (char *)dtrace_loadptr(daddr +
+			    offsetof(struct dev_info, devi_node_name));
+
+			daddr = dtrace_loadptr(daddr +
+			    offsetof(struct dev_info, devi_parent));
+
+			/*
+			 * If our parent is NULL (that is, if we're the root
+			 * node), we're going to use the special path
+			 * "devices".
+			 */
+			if (daddr == 0)
+				s = "devices";
+
+			len = dtrace_strlen(s, size);
+			if (*flags & CPU_DTRACE_FAULT)
+				break;
+
+			if ((end -= (len + 1)) < start)
+				break;
+
+			for (i = 1; i <= len; i++)
+				end[i] = dtrace_load8((uintptr_t)s++);
+			*end = '/';
+
+			if (depth++ > dtrace_devdepth_max) {
+				*flags |= CPU_DTRACE_ILLOP;
+				break;
+			}
+		}
+
+		if (end < start)
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+
+		if (daddr == 0) {
+			regs[rd] = (uintptr_t)end;
+			mstate->dtms_scratch_ptr += size;
+		}
+
+		break;
+	}
+#endif
+
+	case DIF_SUBR_STRJOIN: {
+		char *d = (char *)mstate->dtms_scratch_ptr;
+		uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+		uintptr_t s1 = tupregs[0].dttk_value;
+		uintptr_t s2 = tupregs[1].dttk_value;
+		int i = 0, j = 0;
+		size_t lim1, lim2;
+		char c;
+
+		if (!dtrace_strcanload(s1, size, &lim1, mstate, vstate) ||
+		    !dtrace_strcanload(s2, size, &lim2, mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		if (!DTRACE_INSCRATCH(mstate, size)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+			regs[rd] = 0;
+			break;
+		}
+
+		for (;;) {
+			if (i >= size) {
+				DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+				regs[rd] = 0;
+				break;
+			}
+			c = (i >= lim1) ? '\0' : dtrace_load8(s1++);
+			if ((d[i++] = c) == '\0') {
+				i--;
+				break;
+			}
+		}
+
+		for (;;) {
+			if (i >= size) {
+				DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+				regs[rd] = 0;
+				break;
+			}
+
+			c = (j++ >= lim2) ? '\0' : dtrace_load8(s2++);
+			if ((d[i++] = c) == '\0')
+				break;
+		}
+
+		if (i < size) {
+			mstate->dtms_scratch_ptr += i;
+			regs[rd] = (uintptr_t)d;
+		}
+
+		break;
+	}
+
+	case DIF_SUBR_STRTOLL: {
+		uintptr_t s = tupregs[0].dttk_value;
+		uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+		size_t lim;
+		int base = 10;
+
+		if (nargs > 1) {
+			if ((base = tupregs[1].dttk_value) <= 1 ||
+			    base > ('z' - 'a' + 1) + ('9' - '0' + 1)) {
+				*flags |= CPU_DTRACE_ILLOP;
+				break;
+			}
+		}
+
+		if (!dtrace_strcanload(s, size, &lim, mstate, vstate)) {
+			regs[rd] = INT64_MIN;
+			break;
+		}
+
+		regs[rd] = dtrace_strtoll((char *)s, base, lim);
+		break;
+	}
+
+	case DIF_SUBR_LLTOSTR: {
+		int64_t i = (int64_t)tupregs[0].dttk_value;
+		uint64_t val, digit;
+		uint64_t size = 65;	/* enough room for 2^64 in binary */
+		char *end = (char *)mstate->dtms_scratch_ptr + size - 1;
+		int base = 10;
+
+		if (nargs > 1) {
+			if ((base = tupregs[1].dttk_value) <= 1 ||
+			    base > ('z' - 'a' + 1) + ('9' - '0' + 1)) {
+				*flags |= CPU_DTRACE_ILLOP;
+				break;
+			}
+		}
+
+		val = (base == 10 && i < 0) ? i * -1 : i;
+
+		if (!DTRACE_INSCRATCH(mstate, size)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+			regs[rd] = 0;
+			break;
+		}
+
+		for (*end-- = '\0'; val; val /= base) {
+			if ((digit = val % base) <= '9' - '0') {
+				*end-- = '0' + digit;
+			} else {
+				*end-- = 'a' + (digit - ('9' - '0') - 1);
+			}
+		}
+
+		if (i == 0 && base == 16)
+			*end-- = '0';
+
+		if (base == 16)
+			*end-- = 'x';
+
+		if (i == 0 || base == 8 || base == 16)
+			*end-- = '0';
+
+		if (i < 0 && base == 10)
+			*end-- = '-';
+
+		regs[rd] = (uintptr_t)end + 1;
+		mstate->dtms_scratch_ptr += size;
+		break;
+	}
+
+	case DIF_SUBR_HTONS:
+	case DIF_SUBR_NTOHS:
+#if BYTE_ORDER == BIG_ENDIAN
+		regs[rd] = (uint16_t)tupregs[0].dttk_value;
+#else
+		regs[rd] = DT_BSWAP_16((uint16_t)tupregs[0].dttk_value);
+#endif
+		break;
+
+
+	case DIF_SUBR_HTONL:
+	case DIF_SUBR_NTOHL:
+#if BYTE_ORDER == BIG_ENDIAN
+		regs[rd] = (uint32_t)tupregs[0].dttk_value;
+#else
+		regs[rd] = DT_BSWAP_32((uint32_t)tupregs[0].dttk_value);
+#endif
+		break;
+
+
+	case DIF_SUBR_HTONLL:
+	case DIF_SUBR_NTOHLL:
+#if BYTE_ORDER == BIG_ENDIAN
+		regs[rd] = (uint64_t)tupregs[0].dttk_value;
+#else
+		regs[rd] = DT_BSWAP_64((uint64_t)tupregs[0].dttk_value);
+#endif
+		break;
+
+
+	case DIF_SUBR_DIRNAME:
+	case DIF_SUBR_BASENAME: {
+		char *dest = (char *)mstate->dtms_scratch_ptr;
+		uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+		uintptr_t src = tupregs[0].dttk_value;
+		int i, j, len = dtrace_strlen((char *)src, size);
+		int lastbase = -1, firstbase = -1, lastdir = -1;
+		int start, end;
+
+		if (!dtrace_canload(src, len + 1, mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		if (!DTRACE_INSCRATCH(mstate, size)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+			regs[rd] = 0;
+			break;
+		}
+
+		/*
+		 * The basename and dirname for a zero-length string is
+		 * defined to be "."
+		 */
+		if (len == 0) {
+			len = 1;
+			src = (uintptr_t)".";
+		}
+
+		/*
+		 * Start from the back of the string, moving back toward the
+		 * front until we see a character that isn't a slash.  That
+		 * character is the last character in the basename.
+		 */
+		for (i = len - 1; i >= 0; i--) {
+			if (dtrace_load8(src + i) != '/')
+				break;
+		}
+
+		if (i >= 0)
+			lastbase = i;
+
+		/*
+		 * Starting from the last character in the basename, move
+		 * towards the front until we find a slash.  The character
+		 * that we processed immediately before that is the first
+		 * character in the basename.
+		 */
+		for (; i >= 0; i--) {
+			if (dtrace_load8(src + i) == '/')
+				break;
+		}
+
+		if (i >= 0)
+			firstbase = i + 1;
+
+		/*
+		 * Now keep going until we find a non-slash character.  That
+		 * character is the last character in the dirname.
+		 */
+		for (; i >= 0; i--) {
+			if (dtrace_load8(src + i) != '/')
+				break;
+		}
+
+		if (i >= 0)
+			lastdir = i;
+
+		ASSERT(!(lastbase == -1 && firstbase != -1));
+		ASSERT(!(firstbase == -1 && lastdir != -1));
+
+		if (lastbase == -1) {
+			/*
+			 * We didn't find a non-slash character.  We know that
+			 * the length is non-zero, so the whole string must be
+			 * slashes.  In either the dirname or the basename
+			 * case, we return '/'.
+			 */
+			ASSERT(firstbase == -1);
+			firstbase = lastbase = lastdir = 0;
+		}
+
+		if (firstbase == -1) {
+			/*
+			 * The entire string consists only of a basename
+			 * component.  If we're looking for dirname, we need
+			 * to change our string to be just "."; if we're
+			 * looking for a basename, we'll just set the first
+			 * character of the basename to be 0.
+			 */
+			if (subr == DIF_SUBR_DIRNAME) {
+				ASSERT(lastdir == -1);
+				src = (uintptr_t)".";
+				lastdir = 0;
+			} else {
+				firstbase = 0;
+			}
+		}
+
+		if (subr == DIF_SUBR_DIRNAME) {
+			if (lastdir == -1) {
+				/*
+				 * We know that we have a slash in the name --
+				 * or lastdir would be set to 0, above.  And
+				 * because lastdir is -1, we know that this
+				 * slash must be the first character.  (That
+				 * is, the full string must be of the form
+				 * "/basename".)  In this case, the last
+				 * character of the directory name is 0.
+				 */
+				lastdir = 0;
+			}
+
+			start = 0;
+			end = lastdir;
+		} else {
+			ASSERT(subr == DIF_SUBR_BASENAME);
+			ASSERT(firstbase != -1 && lastbase != -1);
+			start = firstbase;
+			end = lastbase;
+		}
+
+		for (i = start, j = 0; i <= end && j < size - 1; i++, j++)
+			dest[j] = dtrace_load8(src + i);
+
+		dest[j] = '\0';
+		regs[rd] = (uintptr_t)dest;
+		mstate->dtms_scratch_ptr += size;
+		break;
+	}
+
+	case DIF_SUBR_GETF: {
+		uintptr_t fd = tupregs[0].dttk_value;
+		struct filedesc *fdp;
+		file_t *fp;
+
+		if (!dtrace_priv_proc(state)) {
+			regs[rd] = 0;
+			break;
+		}
+		fdp = curproc->p_fd;
+		FILEDESC_SLOCK(fdp);
+		fp = fget_locked(fdp, fd);
+		mstate->dtms_getf = fp;
+		regs[rd] = (uintptr_t)fp;
+		FILEDESC_SUNLOCK(fdp);
+		break;
+	}
+
+	case DIF_SUBR_CLEANPATH: {
+		char *dest = (char *)mstate->dtms_scratch_ptr, c;
+		uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+		uintptr_t src = tupregs[0].dttk_value;
+		size_t lim;
+		int i = 0, j = 0;
+#ifdef illumos
+		zone_t *z;
+#endif
+
+		if (!dtrace_strcanload(src, size, &lim, mstate, vstate)) {
+			regs[rd] = 0;
+			break;
+		}
+
+		if (!DTRACE_INSCRATCH(mstate, size)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+			regs[rd] = 0;
+			break;
+		}
+
+		/*
+		 * Move forward, loading each character.
+		 */
+		do {
+			c = (i >= lim) ? '\0' : dtrace_load8(src + i++);
+next:
+			if (j + 5 >= size)	/* 5 = strlen("/..c\0") */
+				break;
+
+			if (c != '/') {
+				dest[j++] = c;
+				continue;
+			}
+
+			c = (i >= lim) ? '\0' : dtrace_load8(src + i++);
+
+			if (c == '/') {
+				/*
+				 * We have two slashes -- we can just advance
+				 * to the next character.
+				 */
+				goto next;
+			}
+
+			if (c != '.') {
+				/*
+				 * This is not "." and it's not ".." -- we can
+				 * just store the "/" and this character and
+				 * drive on.
+				 */
+				dest[j++] = '/';
+				dest[j++] = c;
+				continue;
+			}
+
+			c = (i >= lim) ? '\0' : dtrace_load8(src + i++);
+
+			if (c == '/') {
+				/*
+				 * This is a "/./" component.  We're not going
+				 * to store anything in the destination buffer;
+				 * we're just going to go to the next component.
+				 */
+				goto next;
+			}
+
+			if (c != '.') {
+				/*
+				 * This is not ".." -- we can just store the
+				 * "/." and this character and continue
+				 * processing.
+				 */
+				dest[j++] = '/';
+				dest[j++] = '.';
+				dest[j++] = c;
+				continue;
+			}
+
+			c = (i >= lim) ? '\0' : dtrace_load8(src + i++);
+
+			if (c != '/' && c != '\0') {
+				/*
+				 * This is not ".." -- it's "..[mumble]".
+				 * We'll store the "/.." and this character
+				 * and continue processing.
+				 */
+				dest[j++] = '/';
+				dest[j++] = '.';
+				dest[j++] = '.';
+				dest[j++] = c;
+				continue;
+			}
+
+			/*
+			 * This is "/../" or "/..\0".  We need to back up
+			 * our destination pointer until we find a "/".
+			 */
+			i--;
+			while (j != 0 && dest[--j] != '/')
+				continue;
+
+			if (c == '\0')
+				dest[++j] = '/';
+		} while (c != '\0');
+
+		dest[j] = '\0';
+
+#ifdef illumos
+		if (mstate->dtms_getf != NULL &&
+		    !(mstate->dtms_access & DTRACE_ACCESS_KERNEL) &&
+		    (z = state->dts_cred.dcr_cred->cr_zone) != kcred->cr_zone) {
+			/*
+			 * If we've done a getf() as a part of this ECB and we
+			 * don't have kernel access (and we're not in the global
+			 * zone), check if the path we cleaned up begins with
+			 * the zone's root path, and trim it off if so.  Note
+			 * that this is an output cleanliness issue, not a
+			 * security issue: knowing one's zone root path does
+			 * not enable privilege escalation.
+			 */
+			if (strstr(dest, z->zone_rootpath) == dest)
+				dest += strlen(z->zone_rootpath) - 1;
+		}
+#endif
+
+		regs[rd] = (uintptr_t)dest;
+		mstate->dtms_scratch_ptr += size;
+		break;
+	}
+
+	case DIF_SUBR_INET_NTOA:
+	case DIF_SUBR_INET_NTOA6:
+	case DIF_SUBR_INET_NTOP: {
+		size_t size;
+		int af, argi, i;
+		char *base, *end;
+
+		if (subr == DIF_SUBR_INET_NTOP) {
+			af = (int)tupregs[0].dttk_value;
+			argi = 1;
+		} else {
+			af = subr == DIF_SUBR_INET_NTOA ? AF_INET: AF_INET6;
+			argi = 0;
+		}
+
+		if (af == AF_INET) {
+			ipaddr_t ip4;
+			uint8_t *ptr8, val;
+
+			if (!dtrace_canload(tupregs[argi].dttk_value,
+			    sizeof (ipaddr_t), mstate, vstate)) {
+				regs[rd] = 0;
+				break;
+			}
+
+			/*
+			 * Safely load the IPv4 address.
+			 */
+			ip4 = dtrace_load32(tupregs[argi].dttk_value);
+
+			/*
+			 * Check an IPv4 string will fit in scratch.
+			 */
+			size = INET_ADDRSTRLEN;
+			if (!DTRACE_INSCRATCH(mstate, size)) {
+				DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+				regs[rd] = 0;
+				break;
+			}
+			base = (char *)mstate->dtms_scratch_ptr;
+			end = (char *)mstate->dtms_scratch_ptr + size - 1;
+
+			/*
+			 * Stringify as a dotted decimal quad.
+			 */
+			*end-- = '\0';
+			ptr8 = (uint8_t *)&ip4;
+			for (i = 3; i >= 0; i--) {
+				val = ptr8[i];
+
+				if (val == 0) {
+					*end-- = '0';
+				} else {
+					for (; val; val /= 10) {
+						*end-- = '0' + (val % 10);
+					}
+				}
+
+				if (i > 0)
+					*end-- = '.';
+			}
+			ASSERT(end + 1 >= base);
+
+		} else if (af == AF_INET6) {
+			struct in6_addr ip6;
+			int firstzero, tryzero, numzero, v6end;
+			uint16_t val;
+			const char digits[] = "0123456789abcdef";
+
+			/*
+			 * Stringify using RFC 1884 convention 2 - 16 bit
+			 * hexadecimal values with a zero-run compression.
+			 * Lower case hexadecimal digits are used.
+			 * 	eg, fe80::214:4fff:fe0b:76c8.
+			 * The IPv4 embedded form is returned for inet_ntop,
+			 * just the IPv4 string is returned for inet_ntoa6.
+			 */
+
+			if (!dtrace_canload(tupregs[argi].dttk_value,
+			    sizeof (struct in6_addr), mstate, vstate)) {
+				regs[rd] = 0;
+				break;
+			}
+
+			/*
+			 * Safely load the IPv6 address.
+			 */
+			dtrace_bcopy(
+			    (void *)(uintptr_t)tupregs[argi].dttk_value,
+			    (void *)(uintptr_t)&ip6, sizeof (struct in6_addr));
+
+			/*
+			 * Check an IPv6 string will fit in scratch.
+			 */
+			size = INET6_ADDRSTRLEN;
+			if (!DTRACE_INSCRATCH(mstate, size)) {
+				DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+				regs[rd] = 0;
+				break;
+			}
+			base = (char *)mstate->dtms_scratch_ptr;
+			end = (char *)mstate->dtms_scratch_ptr + size - 1;
+			*end-- = '\0';
+
+			/*
+			 * Find the longest run of 16 bit zero values
+			 * for the single allowed zero compression - "::".
+			 */
+			firstzero = -1;
+			tryzero = -1;
+			numzero = 1;
+			for (i = 0; i < sizeof (struct in6_addr); i++) {
+#ifdef illumos
+				if (ip6._S6_un._S6_u8[i] == 0 &&
+#else
+				if (ip6.__u6_addr.__u6_addr8[i] == 0 &&
+#endif
+				    tryzero == -1 && i % 2 == 0) {
+					tryzero = i;
+					continue;
+				}
+
+				if (tryzero != -1 &&
+#ifdef illumos
+				    (ip6._S6_un._S6_u8[i] != 0 ||
+#else
+				    (ip6.__u6_addr.__u6_addr8[i] != 0 ||
+#endif
+				    i == sizeof (struct in6_addr) - 1)) {
+
+					if (i - tryzero <= numzero) {
+						tryzero = -1;
+						continue;
+					}
+
+					firstzero = tryzero;
+					numzero = i - i % 2 - tryzero;
+					tryzero = -1;
+
+#ifdef illumos
+					if (ip6._S6_un._S6_u8[i] == 0 &&
+#else
+					if (ip6.__u6_addr.__u6_addr8[i] == 0 &&
+#endif
+					    i == sizeof (struct in6_addr) - 1)
+						numzero += 2;
+				}
+			}
+			ASSERT(firstzero + numzero <= sizeof (struct in6_addr));
+
+			/*
+			 * Check for an IPv4 embedded address.
+			 */
+			v6end = sizeof (struct in6_addr) - 2;
+			if (IN6_IS_ADDR_V4MAPPED(&ip6) ||
+			    IN6_IS_ADDR_V4COMPAT(&ip6)) {
+				for (i = sizeof (struct in6_addr) - 1;
+				    i >= DTRACE_V4MAPPED_OFFSET; i--) {
+					ASSERT(end >= base);
+
+#ifdef illumos
+					val = ip6._S6_un._S6_u8[i];
+#else
+					val = ip6.__u6_addr.__u6_addr8[i];
+#endif
+
+					if (val == 0) {
+						*end-- = '0';
+					} else {
+						for (; val; val /= 10) {
+							*end-- = '0' + val % 10;
+						}
+					}
+
+					if (i > DTRACE_V4MAPPED_OFFSET)
+						*end-- = '.';
+				}
+
+				if (subr == DIF_SUBR_INET_NTOA6)
+					goto inetout;
+
+				/*
+				 * Set v6end to skip the IPv4 address that
+				 * we have already stringified.
+				 */
+				v6end = 10;
+			}
+
+			/*
+			 * Build the IPv6 string by working through the
+			 * address in reverse.
+			 */
+			for (i = v6end; i >= 0; i -= 2) {
+				ASSERT(end >= base);
+
+				if (i == firstzero + numzero - 2) {
+					*end-- = ':';
+					*end-- = ':';
+					i -= numzero - 2;
+					continue;
+				}
+
+				if (i < 14 && i != firstzero - 2)
+					*end-- = ':';
+
+#ifdef illumos
+				val = (ip6._S6_un._S6_u8[i] << 8) +
+				    ip6._S6_un._S6_u8[i + 1];
+#else
+				val = (ip6.__u6_addr.__u6_addr8[i] << 8) +
+				    ip6.__u6_addr.__u6_addr8[i + 1];
+#endif
+
+				if (val == 0) {
+					*end-- = '0';
+				} else {
+					for (; val; val /= 16) {
+						*end-- = digits[val % 16];
+					}
+				}
+			}
+			ASSERT(end + 1 >= base);
+
+		} else {
+			/*
+			 * The user didn't use AH_INET or AH_INET6.
+			 */
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_ILLOP);
+			regs[rd] = 0;
+			break;
+		}
+
+inetout:	regs[rd] = (uintptr_t)end + 1;
+		mstate->dtms_scratch_ptr += size;
+		break;
+	}
+
+	case DIF_SUBR_MEMREF: {
+		uintptr_t size = 2 * sizeof(uintptr_t);
+		uintptr_t *memref = (uintptr_t *) P2ROUNDUP(mstate->dtms_scratch_ptr, sizeof(uintptr_t));
+		size_t scratch_size = ((uintptr_t) memref - mstate->dtms_scratch_ptr) + size;
+
+		/* address and length */
+		memref[0] = tupregs[0].dttk_value;
+		memref[1] = tupregs[1].dttk_value;
+
+		regs[rd] = (uintptr_t) memref;
+		mstate->dtms_scratch_ptr += scratch_size;
+		break;
+	}
+
+#ifndef illumos
+	case DIF_SUBR_MEMSTR: {
+		char *str = (char *)mstate->dtms_scratch_ptr;
+		uintptr_t mem = tupregs[0].dttk_value;
+		char c = tupregs[1].dttk_value;
+		size_t size = tupregs[2].dttk_value;
+		uint8_t n;
+		int i;
+
+		regs[rd] = 0;
+
+		if (size == 0)
+			break;
+
+		if (!dtrace_canload(mem, size - 1, mstate, vstate))
+			break;
+
+		if (!DTRACE_INSCRATCH(mstate, size)) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+			break;
+		}
+
+		if (dtrace_memstr_max != 0 && size > dtrace_memstr_max) {
+			*flags |= CPU_DTRACE_ILLOP;
+			break;
+		}
+
+		for (i = 0; i < size - 1; i++) {
+			n = dtrace_load8(mem++);
+			str[i] = (n == 0) ? c : n;
+		}
+		str[size - 1] = 0;
+
+		regs[rd] = (uintptr_t)str;
+		mstate->dtms_scratch_ptr += size;
+		break;
+	}
+#endif
+	}
+}
+
+/*
  * Emulate the execution of DTrace IR instructions specified by the given
  * DIF object.  This function is deliberately void of assertions as all of
  * the necessary checks are handled by a call to dtrace_difo_validate().
