@@ -1,4 +1,5 @@
 #include <sys/types.h>
+#include <sys/socket.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -53,6 +54,20 @@
 	ASSERT(intr < (1 << 3)); \
 	(where) = ((curthread->td_tid + DIF_VARIABLE_MAX) & \
 	    (((uint64_t)1 << 61) - 1)) | ((uint64_t)intr << 61); \
+/*
+ * Test whether alloc_sz bytes will fit in the scratch region.  We isolate
+ * alloc_sz on the righthand side of the comparison in order to avoid overflow
+ * or underflow in the comparison with it.  This is simpler than the INRANGE
+ * check above, because we know that the dtms_scratch_ptr is valid in the
+ * range.  Allocations of size zero are allowed.
+ */
+#define	DTRACE_INSCRATCH(mstate, alloc_sz) \
+	((mstate)->dtms_scratch_base + (mstate)->dtms_scratch_size - \
+	(mstate)->dtms_scratch_ptr >= (alloc_sz))
+#define	DT_BSWAP_8(x)	((x) & 0xff)
+#define	DT_BSWAP_16(x)	((DT_BSWAP_8(x) << 8) | DT_BSWAP_8((x) >> 8))
+#define	DT_BSWAP_32(x)	((DT_BSWAP_16(x) << 16) | DT_BSWAP_16((x) >> 16))
+#define	DT_BSWAP_64(x)	((DT_BSWAP_32(x) << 32) | DT_BSWAP_32((x) >> 32))
 
 /*
  * Userspace shim...
@@ -142,6 +157,7 @@ _NOTE(CONSTCOND) } while (0)
 
 #define ASSERT3U(...) (0)
 
+int		dtrace_destructive_disallow = 0;
 dtrace_provider_t *dtrace_provider;
 static dtrace_enabling_t *dtrace_retained;
 static dtrace_genid_t	dtrace_retained_gen;	/* current retained enab gen */
@@ -261,6 +277,21 @@ dtrace_strdup(const char *str)
 		(void) strcpy(new, str);
 
 	return (new);
+}
+
+static int
+dtrace_inscratch(uintptr_t dest, size_t size, dtrace_mstate_t *mstate)
+{
+	if (dest < mstate->dtms_scratch_base)
+		return (0);
+
+	if (dest + size < dest)
+		return (0);
+
+	if (dest + size > mstate->dtms_scratch_ptr)
+		return (0);
+
+	return (1);
 }
 
 static int
@@ -4837,8 +4868,8 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
     dtrace_key_t *tupregs, int nargs,
     dtrace_mstate_t *mstate, dtrace_state_t *state)
 {
-	volatile uint16_t *flags = &cpu_core[curcpu].cpuc_dtrace_flags;
-	volatile uintptr_t *illval = &cpu_core[curcpu].cpuc_dtrace_illval;
+	volatile uint16_t *flags = &cpuc_dtrace_flags;
+	volatile uintptr_t *illval = &cpuc_dtrace_illval;
 	dtrace_vstate_t *vstate = &state->dts_vstate;
 
 #ifdef illumos
@@ -4852,17 +4883,18 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 		uintptr_t rw;
 	} r;
 #else
+#if 0
 	struct thread *lowner;
 	union {
 		struct lock_object *li;
 		uintptr_t lx;
 	} l;
 #endif
+#endif
 
 	switch (subr) {
 	case DIF_SUBR_RAND:
-		regs[rd] = dtrace_xoroshiro128_plus_next(
-		    state->dts_rstate[curcpu]);
+		regs[rd] = arc4random();
 		break;
 
 #ifdef illumos
@@ -4954,6 +4986,7 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 		break;
 
 #else /* !illumos */
+#if 0
 	case DIF_SUBR_MUTEX_OWNED:
 		if (!dtrace_canload(tupregs[0].dttk_value,
 			sizeof (struct lock_object), mstate, vstate)) {
@@ -5044,6 +5077,7 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 		DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
 		regs[rd] = (lowner == curthread);
 		break;
+#endif
 #endif /* illumos */
 
 	case DIF_SUBR_BCOPY: {
@@ -5214,6 +5248,11 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 	}
 #endif
 
+	/*
+	 * FIXME: We probably want this, but it's a little bit unclear as to how
+	 * to check this...
+	 */
+#if 0
 	case DIF_SUBR_PROGENYOF: {
 		pid_t pid = tupregs[0].dttk_value;
 		proc_t *p;
@@ -5237,6 +5276,7 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 		regs[rd] = rval;
 		break;
 	}
+#endif
 
 	case DIF_SUBR_SPECULATION:
 		regs[rd] = dtrace_speculation(state);
@@ -6246,6 +6286,10 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 		break;
 	}
 
+	/*
+	 * FIXME: We want this.
+	 */
+#if 0
 	case DIF_SUBR_GETF: {
 		uintptr_t fd = tupregs[0].dttk_value;
 		struct filedesc *fdp;
@@ -6263,6 +6307,7 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 		FILEDESC_SUNLOCK(fdp);
 		break;
 	}
+#endif
 
 	case DIF_SUBR_CLEANPATH: {
 		char *dest = (char *)mstate->dtms_scratch_ptr, c;
@@ -6395,6 +6440,11 @@ next:
 		break;
 	}
 
+	/*
+	 * FIXME: We want to handle this -- but not yet. Too difficult to get to
+	 * compile.
+	 */
+#if 0
 	case DIF_SUBR_INET_NTOA:
 	case DIF_SUBR_INET_NTOA6:
 	case DIF_SUBR_INET_NTOP: {
@@ -6631,6 +6681,7 @@ inetout:	regs[rd] = (uintptr_t)end + 1;
 		mstate->dtms_scratch_ptr += size;
 		break;
 	}
+#endif
 
 	case DIF_SUBR_MEMREF: {
 		uintptr_t size = 2 * sizeof(uintptr_t);
