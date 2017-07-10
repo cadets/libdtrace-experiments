@@ -2251,13 +2251,13 @@ void dtrace_helpers_destroy(proc_t *);
 #endif
 
 #define	DTRACE_CPUFLAG_ISSET(flag) \
-	(cpu_core[curcpu].cpuc_dtrace_flags & (flag))
+	(cpuc_dtrace_flags & (flag))
 
 #define	DTRACE_CPUFLAG_SET(flag) \
-	(cpu_core[curcpu].cpuc_dtrace_flags |= (flag))
+	(cpuc_dtrace_flags |= (flag))
 
 #define	DTRACE_CPUFLAG_CLEAR(flag) \
-	(cpu_core[curcpu].cpuc_dtrace_flags &= ~(flag))
+	(cpuc_dtrace_flags &= ~(flag))
 
 #endif	/* _ASM */
 

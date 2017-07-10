@@ -28,6 +28,8 @@
 #define	P2ROUNDUP(x, align)		(-(-(x) & -(align)))
 #define	P2PHASEUP(x, align, phase)	((phase) - (((phase) - (x)) & -(align)))
 #define	IS_P2ALIGNED(v, a) ((((uintptr_t)(v)) & ((uintptr_t)(a) - 1)) == 0)
+#define	DTRACE_STORE(type, tomax, offset, what) \
+	*((type *)((uintptr_t)(tomax) + (uintptr_t)offset)) = (type)(what);
 /*
  * DTrace Macros and Constants
  *
@@ -55,8 +57,28 @@
  * few of them in order to keep DTrace behaviour as close as possible to the
  * original, assuming we have no SMP.
  */
-#define	CPU_DTRACE_ERROR	0x01
-#define	CPU_DTRACE_DROP		0x02
+#define	CPU_DTRACE_NOFAULT	0x0001	/* Don't fault */
+#define	CPU_DTRACE_DROP		0x0002	/* Drop this ECB */
+#define	CPU_DTRACE_BADADDR	0x0004	/* DTrace fault: bad address */
+#define	CPU_DTRACE_BADALIGN	0x0008	/* DTrace fault: bad alignment */
+#define	CPU_DTRACE_DIVZERO	0x0010	/* DTrace fault: divide by zero */
+#define	CPU_DTRACE_ILLOP	0x0020	/* DTrace fault: illegal operation */
+#define	CPU_DTRACE_NOSCRATCH	0x0040	/* DTrace fault: out of scratch */
+#define	CPU_DTRACE_KPRIV	0x0080	/* DTrace fault: bad kernel access */
+#define	CPU_DTRACE_UPRIV	0x0100	/* DTrace fault: bad user access */
+#define	CPU_DTRACE_TUPOFLOW	0x0200	/* DTrace fault: tuple stack overflow */
+#if defined(__sparc)
+#define	CPU_DTRACE_FAKERESTORE	0x0400	/* pid provider hint to getreg */
+#endif
+#define	CPU_DTRACE_ENTRY	0x0800	/* pid provider hint to ustack() */
+#define	CPU_DTRACE_BADSTACK	0x1000	/* DTrace fault: bad stack */
+
+#define	CPU_DTRACE_FAULT	(CPU_DTRACE_BADADDR | CPU_DTRACE_BADALIGN | \
+				CPU_DTRACE_DIVZERO | CPU_DTRACE_ILLOP | \
+				CPU_DTRACE_NOSCRATCH | CPU_DTRACE_KPRIV | \
+				CPU_DTRACE_UPRIV | CPU_DTRACE_TUPOFLOW | \
+				CPU_DTRACE_BADSTACK)
+#define	CPU_DTRACE_ERROR	(CPU_DTRACE_FAULT | CPU_DTRACE_DROP)
 
 #define ASSERT3U(...) (0)
 
@@ -75,6 +97,9 @@ static int		dtrace_nprobes;		/* number of probes */
 static int		dtrace_nprovs;		/* number of providers */
 static struct unrhdr	*dtrace_arena;		/* Probe ID number.     */
 static struct mtx	dtrace_unr_mtx;
+
+volatile uint16_t cpuc_dtrace_flags = 0;	/* userspace shim */
+volatile uintptr_t cpuc_dtrace_illval = 0;	/* userspace shim */
 
 static size_t dtrace_strlen(const char *, size_t);
 static dtrace_probe_t *dtrace_probe_lookup_id(dtrace_id_t id);
@@ -432,8 +457,8 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 	dtrace_statvar_t *svar;
 	dtrace_dstate_t *dstate = &vstate->dtvs_dynvars;
 	dtrace_difv_t *v;
-	volatile uint16_t *flags = &cpu_core[curcpu].cpuc_dtrace_flags;
-	volatile uintptr_t *illval = &cpu_core[curcpu].cpuc_dtrace_illval;
+	volatile uint16_t *flags = &cpuc_dtrace_flags;
+	volatile uintptr_t *illval = &cpuc_dtrace_illval;
 
 	dtrace_key_t tupregs[DIF_DTR_NREGS + 2]; /* +2 for thread and id */
 	uint64_t regs[DIF_DIR_NREGS];
