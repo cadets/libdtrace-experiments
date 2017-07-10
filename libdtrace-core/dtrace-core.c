@@ -594,6 +594,45 @@ dtrace_canload_remains(uint64_t addr, size_t sz, size_t *remain,
 }
 
 /*
+ * Atomically increment a specified error counter from probe context.
+ */
+static void
+dtrace_error(uint32_t *counter)
+{
+	/*
+	 * Most counters stored to in probe context are per-CPU counters.
+	 * However, there are some error conditions that are sufficiently
+	 * arcane that they don't merit per-CPU storage.  If these counters
+	 * are incremented concurrently on different CPUs, scalability will be
+	 * adversely affected -- but we don't expect them to be white-hot in a
+	 * correctly constructed enabling...
+	 */
+	uint32_t oval, nval;
+
+	do {
+		oval = *counter;
+
+		if ((nval = oval + 1) == 0) {
+			/*
+			 * If the counter would wrap, set it to 1 -- assuring
+			 * that the counter is never zero when we have seen
+			 * errors.  (The counter must be 32-bits because we
+			 * aren't guaranteed a 64-bit compare&swap operation.)
+			 * To save this code both the infamy of being fingered
+			 * by a priggish news story and the indignity of being
+			 * the target of a neo-puritan witch trial, we're
+			 * carefully avoiding any colorful description of the
+			 * likelihood of this condition -- but suffice it to
+			 * say that it is only slightly more likely than the
+			 * overflow of predicate cache IDs, as discussed in
+			 * dtrace_predicate_create().
+			 */
+			nval = 1;
+		}
+	} while (dtrace_cas32(counter, oval, nval) != oval);
+}
+
+/*
  * Convenience routine to check to see if a given string is within a memory
  * region in which a load may be issued given the user's privilege level;
  * this exists so that we don't need to issue unnecessary dtrace_strlen()
@@ -3818,7 +3857,7 @@ dtrace_speculation_commit(dtrace_state_t *state, processorid_t cpu,
 		return;
 
 	if (which > state->dts_nspeculations) {
-		cpu_core[cpu].cpuc_dtrace_flags |= CPU_DTRACE_ILLOP;
+		cpuc_dtrace_flags |= CPU_DTRACE_ILLOP;
 		return;
 	}
 
@@ -4347,7 +4386,7 @@ dtrace_dif_variable(dtrace_mstate_t *mstate, dtrace_state_t *state, uint64_t v,
 
 		if ((lwp = curthread->t_lwp) == NULL) {
 			DTRACE_CPUFLAG_SET(CPU_DTRACE_BADADDR);
-			cpu_core[curcpu].cpuc_dtrace_illval = NULL;
+			cpuc_dtrace_illval = NULL;
 			return (0);
 		}
 
@@ -6091,7 +6130,7 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 #ifdef illumos
 				    valoffs, (uint64_t)pid->pid_id);
 #else
-				    valoffs, (uint64_t) curproc->p_pid);
+				    valoffs, getpid());
 #endif
 				DTRACE_STORE(uint64_t, tomax,
 				    valoffs + sizeof (uint64_t), val);
@@ -6212,7 +6251,13 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 				 * time to prevent it from being accumulated
 				 * into t_dtrace_vtime.
 				 */
+				/*
+				 * FIXME: We want timestamps, but definitely do
+				 * not want them in userspace.
+				 */
+#if 0
 				curthread->t_dtrace_start = 0;
+#endif
 			}
 
 			/*
