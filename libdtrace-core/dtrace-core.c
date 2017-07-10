@@ -582,7 +582,7 @@ dtrace_vcanload(void *src, dtrace_diftype_t *type, size_t *remain,
     dtrace_mstate_t *mstate, dtrace_vstate_t *vstate)
 {
 	size_t sz;
-	ASSERT(type->dtdt_flags & DIF_TF_BYREF);
+	assert(type->dtdt_flags & DIF_TF_BYREF);
 
 	/*
 	 * Calculate the max size before performing any checks since even
@@ -764,7 +764,7 @@ dtrace_buffer_reserve(dtrace_buffer_t *buf, size_t needed, size_t align,
 			 * Assert that our alignment is off by a number which
 			 * is itself sizeof (uint32_t) aligned.
 			 */
-			ASSERT(!((align - (offs & (align - 1))) &
+			assert(!((align - (offs & (align - 1))) &
 			    (sizeof (uint32_t) - 1)));
 			DTRACE_STORE(uint32_t, tomax, offs, DTRACE_EPIDNONE);
 			offs += sizeof (uint32_t);
@@ -886,13 +886,13 @@ dtrace_buffer_reserve(dtrace_buffer_t *buf, size_t needed, size_t align,
 				size = sizeof (uint32_t);
 			} else {
 				ASSERT3U(epid, <=, state->dts_necbs);
-				ASSERT(state->dts_ecbs[epid - 1] != NULL);
+				assert(state->dts_ecbs[epid - 1] != NULL);
 
 				size = state->dts_ecbs[epid - 1]->dte_size;
 			}
 
-			ASSERT(woffs + size <= buf->dtb_size);
-			ASSERT(size != 0);
+			assert(woffs + size <= buf->dtb_size);
+			assert(size != 0);
 
 			if (woffs + size == buf->dtb_size) {
 				/*
@@ -947,7 +947,7 @@ out:
 		 * Assert that our alignment is off by a number which
 		 * is itself sizeof (uint32_t) aligned.
 		 */
-		ASSERT(!((align - (offs & (align - 1))) &
+		assert(!((align - (offs & (align - 1))) &
 		    (sizeof (uint32_t) - 1)));
 		DTRACE_STORE(uint32_t, tomax, offs, DTRACE_EPIDNONE);
 		offs += sizeof (uint32_t);
@@ -1282,7 +1282,7 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 
 				id -= DIF_VAR_OTHER_UBASE;
 				svar = vstate->dtvs_globals[id];
-				ASSERT(svar != NULL);
+				assert(svar != NULL);
 				v = &svar->dtsv_var;
 
 				if (!(v->dtdv_type.dtdt_flags & DIF_TF_BYREF)) {
@@ -1312,20 +1312,20 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 		case DIF_OP_STGS:
 			id = DIF_INSTR_VAR(instr);
 
-			ASSERT(id >= DIF_VAR_OTHER_UBASE);
+			assert(id >= DIF_VAR_OTHER_UBASE);
 			id -= DIF_VAR_OTHER_UBASE;
 
 			VERIFY(id < vstate->dtvs_nglobals);
 			svar = vstate->dtvs_globals[id];
-			ASSERT(svar != NULL);
+			assert(svar != NULL);
 			v = &svar->dtsv_var;
 
 			if (v->dtdv_type.dtdt_flags & DIF_TF_BYREF) {
 				uintptr_t a = (uintptr_t)svar->dtsv_data;
 				size_t lim;
 
-				ASSERT(a != 0);
-				ASSERT(svar->dtsv_size != 0);
+				assert(a != 0);
+				assert(svar->dtsv_size != 0);
 
 				if (regs[rd] == 0) {
 					*(uint8_t *)a = UINT8_MAX;
@@ -1369,11 +1369,11 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 
 			id -= DIF_VAR_OTHER_UBASE;
 
-			ASSERT(id < vstate->dtvs_nlocals);
-			ASSERT(vstate->dtvs_locals != NULL);
+			assert(id < vstate->dtvs_nlocals);
+			assert(vstate->dtvs_locals != NULL);
 
 			svar = vstate->dtvs_locals[id];
-			ASSERT(svar != NULL);
+			assert(svar != NULL);
 			v = &svar->dtsv_var;
 
 			if (v->dtdv_type.dtdt_flags & DIF_TF_BYREF) {
@@ -1382,7 +1382,7 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 				size_t lim;
 
 				sz += sizeof (uint64_t);
-				ASSERT(svar->dtsv_size == NCPU * sz);
+				assert(svar->dtsv_size == NCPU * sz);
 				a += curcpu * sz;
 
 				if (*(uint8_t *)a == UINT8_MAX) {
@@ -1399,7 +1399,7 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 				break;
 			}
 
-			ASSERT(svar->dtsv_size == NCPU * sizeof (uint64_t));
+			assert(svar->dtsv_size == NCPU * sizeof (uint64_t));
 			tmp = (uint64_t *)(uintptr_t)svar->dtsv_data;
 			regs[rd] = tmp[curcpu];
 			break;
@@ -1407,13 +1407,13 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 		case DIF_OP_STLS:
 			id = DIF_INSTR_VAR(instr);
 
-			ASSERT(id >= DIF_VAR_OTHER_UBASE);
+			assert(id >= DIF_VAR_OTHER_UBASE);
 			id -= DIF_VAR_OTHER_UBASE;
 			VERIFY(id < vstate->dtvs_nlocals);
 
-			ASSERT(vstate->dtvs_locals != NULL);
+			assert(vstate->dtvs_locals != NULL);
 			svar = vstate->dtvs_locals[id];
-			ASSERT(svar != NULL);
+			assert(svar != NULL);
 			v = &svar->dtsv_var;
 
 			if (v->dtdv_type.dtdt_flags & DIF_TF_BYREF) {
@@ -1422,7 +1422,7 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 				size_t lim;
 
 				sz += sizeof (uint64_t);
-				ASSERT(svar->dtsv_size == NCPU * sz);
+				assert(svar->dtsv_size == NCPU * sz);
 				a += curcpu * sz;
 
 				if (regs[rd] == 0) {
@@ -1443,7 +1443,7 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 				break;
 			}
 
-			ASSERT(svar->dtsv_size == NCPU * sizeof (uint64_t));
+			assert(svar->dtsv_size == NCPU * sizeof (uint64_t));
 			tmp = (uint64_t *)(uintptr_t)svar->dtsv_data;
 			tmp[curcpu] = regs[rd];
 			break;
@@ -1453,7 +1453,7 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 			dtrace_key_t *key;
 
 			id = DIF_INSTR_VAR(instr);
-			ASSERT(id >= DIF_VAR_OTHER_UBASE);
+			assert(id >= DIF_VAR_OTHER_UBASE);
 			id -= DIF_VAR_OTHER_UBASE;
 			v = &vstate->dtvs_tlocals[id];
 
@@ -1486,7 +1486,7 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 			dtrace_key_t *key;
 
 			id = DIF_INSTR_VAR(instr);
-			ASSERT(id >= DIF_VAR_OTHER_UBASE);
+			assert(id >= DIF_VAR_OTHER_UBASE);
 			id -= DIF_VAR_OTHER_UBASE;
 			VERIFY(id < vstate->dtvs_ntlocals);
 
@@ -1595,7 +1595,7 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 			uint_t nkeys = ttop;
 
 			id = DIF_INSTR_VAR(instr);
-			ASSERT(id >= DIF_VAR_OTHER_UBASE);
+			assert(id >= DIF_VAR_OTHER_UBASE);
 			id -= DIF_VAR_OTHER_UBASE;
 
 			key[nkeys].dttk_value = (uint64_t)id;
@@ -1637,7 +1637,7 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 			uint_t nkeys = ttop;
 
 			id = DIF_INSTR_VAR(instr);
-			ASSERT(id >= DIF_VAR_OTHER_UBASE);
+			assert(id >= DIF_VAR_OTHER_UBASE);
 			id -= DIF_VAR_OTHER_UBASE;
 
 			key[nkeys].dttk_value = (uint64_t)id;
@@ -1776,637 +1776,6 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 	mstate->dtms_present |= DTRACE_MSTATE_FLTOFFS;
 
 	return (0);
-}
-
-/*
- * If you're looking for the epicenter of DTrace, you just found it.  This
- * is the function called by the provider to fire a probe -- from which all
- * subsequent probe-context DTrace activity emanates.
- */
-void
-dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
-    uintptr_t arg2, uintptr_t arg3, uintptr_t arg4)
-{
-	dtrace_icookie_t cookie;
-	dtrace_probe_t *probe;
-	dtrace_mstate_t mstate;
-	dtrace_ecb_t *ecb;
-	dtrace_action_t *act;
-	intptr_t offs;
-	size_t size;
-	int vtime, onintr;
-	volatile uint16_t *flags;
-	hrtime_t now;
-
-	probe = dtrace_probes[id - 1];
-
-	/*
-	 * TODO: We need a way to ask for a timestamp from the kernel in an
-	 * efficient, but safe way. This should also be as high resolution as
-	 * possible.
-	 */
-#if 0
-	now = mstate.dtms_timestamp = dtrace_gethrtime();
-	mstate.dtms_present |= DTRACE_MSTATE_TIMESTAMP;
-	vtime = dtrace_vtime_references != 0;
-
-	if (vtime && curthread->t_dtrace_start)
-		curthread->t_dtrace_vtime += now - curthread->t_dtrace_start;
-#endif
-
-	mstate.dtms_difo = NULL;
-	mstate.dtms_probe = probe;
-	mstate.dtms_strtok = 0;
-	mstate.dtms_arg[0] = arg0;
-	mstate.dtms_arg[1] = arg1;
-	mstate.dtms_arg[2] = arg2;
-	mstate.dtms_arg[3] = arg3;
-	mstate.dtms_arg[4] = arg4;
-
-	/*
-	 * XXX: This might become something else eventually...?
-	 */
-#if 0
-	flags = (volatile uint16_t *)&cpu_core[cpuid].cpuc_dtrace_flags;
-#endif
-
-	for (ecb = probe->dtpr_ecb; ecb != NULL; ecb = ecb->dte_next) {
-		dtrace_predicate_t *pred = ecb->dte_predicate;
-		dtrace_state_t *state = ecb->dte_state;
-		/*
-		 * TODO: Figure out how to best aggregate (probably by arbitrary
-		 * things??)
-		 */
-		dtrace_buffer_t *buf = &state->dts_buffer;
-		dtrace_buffer_t *aggbuf = &state->dts_aggbuffer;
-		dtrace_vstate_t *vstate = &state->dts_vstate;
-		dtrace_provider_t *prov = probe->dtpr_provider;
-		uint64_t tracememsize = 0;
-		int committed = 0;
-		caddr_t tomax;
-
-		/*
-		 * A little subtlety with the following (seemingly innocuous)
-		 * declaration of the automatic 'val':  by looking at the
-		 * code, you might think that it could be declared in the
-		 * action processing loop, below.  (That is, it's only used in
-		 * the action processing loop.)  However, it must be declared
-		 * out of that scope because in the case of DIF expression
-		 * arguments to aggregating actions, one iteration of the
-		 * action loop will use the last iteration's value.
-		 */
-		uint64_t val = 0;
-
-		mstate.dtms_present = DTRACE_MSTATE_ARGS | DTRACE_MSTATE_PROBE;
-		mstate.dtms_getf = NULL;
-
-		*flags &= ~CPU_DTRACE_ERROR;
-
-		if (prov == dtrace_provider) {
-			/*
-			 * If dtrace itself is the provider of this probe,
-			 * we're only going to continue processing the ECB if
-			 * arg0 (the dtrace_state_t) is equal to the ECB's
-			 * creating state.  (This prevents disjoint consumers
-			 * from seeing one another's metaprobes.)
-			 */
-			if (arg0 != (uint64_t)(uintptr_t)state)
-				continue;
-		}
-
-		if (state->dts_activity != DTRACE_ACTIVITY_ACTIVE) {
-			/*
-			 * We're not currently active.  If our provider isn't
-			 * the dtrace pseudo provider, we're not interested.
-			 */
-			if (prov != dtrace_provider)
-				continue;
-
-			/*
-			 * Now we must further check if we are in the BEGIN
-			 * probe.  If we are, we will only continue processing
-			 * if we're still in WARMUP -- if one BEGIN enabling
-			 * has invoked the exit() action, we don't want to
-			 * evaluate subsequent BEGIN enablings.
-			 */
-			if (probe->dtpr_id == dtrace_probeid_begin &&
-			    state->dts_activity != DTRACE_ACTIVITY_WARMUP) {
-				ASSERT(state->dts_activity ==
-				    DTRACE_ACTIVITY_DRAINING);
-				continue;
-			}
-		}
-
-		if (ecb->dte_cond) {
-			/*
-			 * If the dte_cond bits indicate that this
-			 * consumer is only allowed to see user-mode firings
-			 * of this probe, call the provider's dtps_usermode()
-			 * entry point to check that the probe was fired
-			 * while in a user context. Skip this ECB if that's
-			 * not the case.
-			 */
-			if ((ecb->dte_cond & DTRACE_COND_USERMODE) &&
-			    prov->dtpv_pops.dtps_usermode(prov->dtpv_arg,
-			    probe->dtpr_id, probe->dtpr_arg) == 0)
-				continue;
-		}
-
-		/*
-		 * TODO: Here we want to enable destructive actions, but it's
-		 * unclear as to how to do so (at least to me). We could set
-		 * some sort of a flag and have a co-processor in the kernel...?
-		 */
-#if 0
-		if (now - state->dts_alive > dtrace_deadman_timeout) {
-			/*
-			 * We seem to be dead.  Unless we (a) have kernel
-			 * destructive permissions (b) have explicitly enabled
-			 * destructive actions and (c) destructive actions have
-			 * not been disabled, we're going to transition into
-			 * the KILLED state, from which no further processing
-			 * on this state will be performed.
-			 */
-			if (!dtrace_priv_kernel_destructive(state) ||
-			    !state->dts_cred.dcr_destructive ||
-			    dtrace_destructive_disallow) {
-				void *activity = &state->dts_activity;
-				dtrace_activity_t current;
-
-				do {
-					current = state->dts_activity;
-				} while (dtrace_cas32(activity, current,
-				    DTRACE_ACTIVITY_KILLED) != current);
-
-				continue;
-			}
-		}
-#endif
-
-		if ((offs = dtrace_buffer_reserve(buf, ecb->dte_needed,
-		    ecb->dte_alignment, state, &mstate)) < 0)
-			continue;
-
-
-		tomax = buf->dtb_tomax;
-		ASSERT(tomax != NULL);
-
-		/*
-		 * TODO: Figure out how to timestamp
-		 */
-#if 0
-		if (ecb->dte_size != 0) {
-			dtrace_rechdr_t dtrh;
-			if (!(mstate.dtms_present & DTRACE_MSTATE_TIMESTAMP)) {
-				mstate.dtms_timestamp = dtrace_gethrtime();
-				mstate.dtms_present |= DTRACE_MSTATE_TIMESTAMP;
-			}
-			ASSERT3U(ecb->dte_size, >=, sizeof (dtrace_rechdr_t));
-			dtrh.dtrh_epid = ecb->dte_epid;
-			DTRACE_RECORD_STORE_TIMESTAMP(&dtrh,
-			    mstate.dtms_timestamp);
-			*((dtrace_rechdr_t *)(tomax + offs)) = dtrh;
-		}
-#endif
-
-		mstate.dtms_epid = ecb->dte_epid;
-		mstate.dtms_present |= DTRACE_MSTATE_EPID;
-
-		if (state->dts_cred.dcr_visible & DTRACE_CRV_KERNEL)
-			mstate.dtms_access = DTRACE_ACCESS_KERNEL;
-		else
-			mstate.dtms_access = 0;
-
-		if (pred != NULL) {
-			dtrace_difo_t *dp = pred->dtp_difo;
-			uint64_t rval;
-
-			rval = dtrace_dif_emulate(dp, &mstate, vstate, state);
-
-			if (!(*flags & CPU_DTRACE_ERROR) && !rval) {
-				dtrace_cacheid_t cid = probe->dtpr_predcache;
-
-				if (cid != DTRACE_CACHEIDNONE && !onintr) {
-					/*
-					 * Update the predicate cache...
-					 */
-					ASSERT(cid == pred->dtp_cacheid);
-					t_predcache = cid;
-				}
-
-				continue;
-			}
-		}
-
-		for (act = ecb->dte_action; !(*flags & CPU_DTRACE_ERROR) &&
-		    act != NULL; act = act->dta_next) {
-			size_t valoffs;
-			dtrace_difo_t *dp;
-			dtrace_recdesc_t *rec = &act->dta_rec;
-
-			size = rec->dtrd_size;
-			valoffs = offs + rec->dtrd_offset;
-
-			if (DTRACEACT_ISAGG(act->dta_kind)) {
-				uint64_t v = 0xbad;
-				dtrace_aggregation_t *agg;
-
-				agg = (dtrace_aggregation_t *)act;
-
-				if ((dp = act->dta_difo) != NULL)
-					v = dtrace_dif_emulate(dp,
-					    &mstate, vstate, state);
-
-				if (*flags & CPU_DTRACE_ERROR)
-					continue;
-
-				/*
-				 * Note that we always pass the expression
-				 * value from the previous iteration of the
-				 * action loop.  This value will only be used
-				 * if there is an expression argument to the
-				 * aggregating action, denoted by the
-				 * dtag_hasarg field.
-				 */
-				dtrace_aggregate(agg, buf,
-				    offs, aggbuf, v, val);
-				continue;
-			}
-
-			switch (act->dta_kind) {
-			case DTRACEACT_STOP:
-				if (dtrace_priv_proc_destructive(state))
-					dtrace_action_stop();
-				continue;
-
-			case DTRACEACT_BREAKPOINT:
-				if (dtrace_priv_kernel_destructive(state))
-					dtrace_action_breakpoint(ecb);
-				continue;
-
-			case DTRACEACT_PANIC:
-				if (dtrace_priv_kernel_destructive(state))
-					dtrace_action_panic(ecb);
-				continue;
-
-			case DTRACEACT_STACK:
-				if (!dtrace_priv_kernel(state))
-					continue;
-
-				dtrace_getpcstack((pc_t *)(tomax + valoffs),
-				    size / sizeof (pc_t), probe->dtpr_aframes,
-				    DTRACE_ANCHORED(probe) ? NULL :
-				    (uint32_t *)arg0);
-				continue;
-
-			case DTRACEACT_JSTACK:
-			case DTRACEACT_USTACK:
-				if (!dtrace_priv_proc(state))
-					continue;
-
-				/*
-				 * See comment in DIF_VAR_PID.
-				 */
-				if (DTRACE_ANCHORED(mstate.dtms_probe) &&
-				    CPU_ON_INTR(CPU)) {
-					int depth = DTRACE_USTACK_NFRAMES(
-					    rec->dtrd_arg) + 1;
-
-					dtrace_bzero((void *)(tomax + valoffs),
-					    DTRACE_USTACK_STRSIZE(rec->dtrd_arg)
-					    + depth * sizeof (uint64_t));
-
-					continue;
-				}
-
-				if (DTRACE_USTACK_STRSIZE(rec->dtrd_arg) != 0 &&
-				    curproc->p_dtrace_helpers != NULL) {
-					/*
-					 * This is the slow path -- we have
-					 * allocated string space, and we're
-					 * getting the stack of a process that
-					 * has helpers.  Call into a separate
-					 * routine to perform this processing.
-					 */
-					dtrace_action_ustack(&mstate, state,
-					    (uint64_t *)(tomax + valoffs),
-					    rec->dtrd_arg);
-					continue;
-				}
-
-				DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
-				dtrace_getupcstack((uint64_t *)
-				    (tomax + valoffs),
-				    DTRACE_USTACK_NFRAMES(rec->dtrd_arg) + 1);
-				DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
-				continue;
-
-			default:
-				break;
-			}
-
-			dp = act->dta_difo;
-			ASSERT(dp != NULL);
-
-			val = dtrace_dif_emulate(dp, &mstate, vstate, state);
-
-			if (*flags & CPU_DTRACE_ERROR)
-				continue;
-
-			switch (act->dta_kind) {
-			case DTRACEACT_SPECULATE: {
-				dtrace_rechdr_t *dtrh;
-
-				ASSERT(buf == &state->dts_buffer[cpuid]);
-				buf = dtrace_speculation_buffer(state,
-				    cpuid, val);
-
-				if (buf == NULL) {
-					*flags |= CPU_DTRACE_DROP;
-					continue;
-				}
-
-				offs = dtrace_buffer_reserve(buf,
-				    ecb->dte_needed, ecb->dte_alignment,
-				    state, NULL);
-
-				if (offs < 0) {
-					*flags |= CPU_DTRACE_DROP;
-					continue;
-				}
-
-				tomax = buf->dtb_tomax;
-				ASSERT(tomax != NULL);
-
-				if (ecb->dte_size == 0)
-					continue;
-
-				ASSERT3U(ecb->dte_size, >=,
-				    sizeof (dtrace_rechdr_t));
-				dtrh = ((void *)(tomax + offs));
-				dtrh->dtrh_epid = ecb->dte_epid;
-				/*
-				 * When the speculation is committed, all of
-				 * the records in the speculative buffer will
-				 * have their timestamps set to the commit
-				 * time.  Until then, it is set to a sentinel
-				 * value, for debugability.
-				 */
-				DTRACE_RECORD_STORE_TIMESTAMP(dtrh, UINT64_MAX);
-				continue;
-			}
-
-			case DTRACEACT_PRINTM: {
-				/* The DIF returns a 'memref'. */
-				uintptr_t *memref = (uintptr_t *)(uintptr_t) val;
-
-				/* Get the size from the memref. */
-				size = memref[1];
-
-				/*
-				 * Check if the size exceeds the allocated
-				 * buffer size.
-				 */
-				if (size + sizeof(uintptr_t) > dp->dtdo_rtype.dtdt_size) {
-					/* Flag a drop! */
-					*flags |= CPU_DTRACE_DROP;
-					continue;
-				}
-
-				/* Store the size in the buffer first. */
-				DTRACE_STORE(uintptr_t, tomax,
-				    valoffs, size);
-
-				/*
-				 * Offset the buffer address to the start
-				 * of the data.
-				 */
-				valoffs += sizeof(uintptr_t);
-
-				/*
-				 * Reset to the memory address rather than
-				 * the memref array, then let the BYREF
-				 * code below do the work to store the 
-				 * memory data in the buffer.
-				 */
-				val = memref[0];
-				break;
-			}
-
-			case DTRACEACT_CHILL:
-				if (dtrace_priv_kernel_destructive(state))
-					dtrace_action_chill(&mstate, val);
-				continue;
-
-			case DTRACEACT_RAISE:
-				if (dtrace_priv_proc_destructive(state))
-					dtrace_action_raise(val);
-				continue;
-
-			case DTRACEACT_COMMIT:
-				ASSERT(!committed);
-
-				/*
-				 * We need to commit our buffer state.
-				 */
-				if (ecb->dte_size)
-					buf->dtb_offset = offs + ecb->dte_size;
-				buf = &state->dts_buffer[cpuid];
-				dtrace_speculation_commit(state, cpuid, val);
-				committed = 1;
-				continue;
-
-			case DTRACEACT_DISCARD:
-				dtrace_speculation_discard(state, cpuid, val);
-				continue;
-
-			case DTRACEACT_DIFEXPR:
-			case DTRACEACT_LIBACT:
-			case DTRACEACT_PRINTF:
-			case DTRACEACT_PRINTA:
-			case DTRACEACT_SYSTEM:
-			case DTRACEACT_FREOPEN:
-			case DTRACEACT_TRACEMEM:
-				break;
-
-			case DTRACEACT_TRACEMEM_DYNSIZE:
-				tracememsize = val;
-				break;
-
-			case DTRACEACT_SYM:
-			case DTRACEACT_MOD:
-				if (!dtrace_priv_kernel(state))
-					continue;
-				break;
-
-			case DTRACEACT_USYM:
-			case DTRACEACT_UMOD:
-			case DTRACEACT_UADDR: {
-#ifdef illumos
-				struct pid *pid = curthread->t_procp->p_pidp;
-#endif
-
-				if (!dtrace_priv_proc(state))
-					continue;
-
-				DTRACE_STORE(uint64_t, tomax,
-#ifdef illumos
-				    valoffs, (uint64_t)pid->pid_id);
-#else
-				    valoffs, (uint64_t) curproc->p_pid);
-#endif
-				DTRACE_STORE(uint64_t, tomax,
-				    valoffs + sizeof (uint64_t), val);
-
-				continue;
-			}
-
-			case DTRACEACT_EXIT: {
-				/*
-				 * For the exit action, we are going to attempt
-				 * to atomically set our activity to be
-				 * draining.  If this fails (either because
-				 * another CPU has beat us to the exit action,
-				 * or because our current activity is something
-				 * other than ACTIVE or WARMUP), we will
-				 * continue.  This assures that the exit action
-				 * can be successfully recorded at most once
-				 * when we're in the ACTIVE state.  If we're
-				 * encountering the exit() action while in
-				 * COOLDOWN, however, we want to honor the new
-				 * status code.  (We know that we're the only
-				 * thread in COOLDOWN, so there is no race.)
-				 */
-				void *activity = &state->dts_activity;
-				dtrace_activity_t current = state->dts_activity;
-
-				if (current == DTRACE_ACTIVITY_COOLDOWN)
-					break;
-
-				if (current != DTRACE_ACTIVITY_WARMUP)
-					current = DTRACE_ACTIVITY_ACTIVE;
-
-				if (dtrace_cas32(activity, current,
-				    DTRACE_ACTIVITY_DRAINING) != current) {
-					*flags |= CPU_DTRACE_DROP;
-					continue;
-				}
-
-				break;
-			}
-
-			default:
-				ASSERT(0);
-			}
-
-			if (dp->dtdo_rtype.dtdt_flags & DIF_TF_BYREF ||
-			    dp->dtdo_rtype.dtdt_flags & DIF_TF_BYUREF) {
-				uintptr_t end = valoffs + size;
-
-				if (tracememsize != 0 &&
-				    valoffs + tracememsize < end) {
-					end = valoffs + tracememsize;
-					tracememsize = 0;
-				}
-
-				if (dp->dtdo_rtype.dtdt_flags & DIF_TF_BYREF &&
-				    !dtrace_vcanload((void *)(uintptr_t)val,
-				    &dp->dtdo_rtype, NULL, &mstate, vstate))
-					continue;
-
-				dtrace_store_by_ref(dp, tomax, size, &valoffs,
-				    &val, end, act->dta_intuple,
-				    dp->dtdo_rtype.dtdt_flags & DIF_TF_BYREF ?
-				    DIF_TF_BYREF: DIF_TF_BYUREF);
-				continue;
-			}
-
-			switch (size) {
-			case 0:
-				break;
-
-			case sizeof (uint8_t):
-				DTRACE_STORE(uint8_t, tomax, valoffs, val);
-				break;
-			case sizeof (uint16_t):
-				DTRACE_STORE(uint16_t, tomax, valoffs, val);
-				break;
-			case sizeof (uint32_t):
-				DTRACE_STORE(uint32_t, tomax, valoffs, val);
-				break;
-			case sizeof (uint64_t):
-				DTRACE_STORE(uint64_t, tomax, valoffs, val);
-				break;
-			default:
-				/*
-				 * Any other size should have been returned by
-				 * reference, not by value.
-				 */
-				ASSERT(0);
-				break;
-			}
-		}
-
-		if (*flags & CPU_DTRACE_DROP)
-			continue;
-
-		if (*flags & CPU_DTRACE_FAULT) {
-			int ndx;
-			dtrace_action_t *err;
-
-			buf->dtb_errors++;
-
-			if (probe->dtpr_id == dtrace_probeid_error) {
-				/*
-				 * There's nothing we can do -- we had an
-				 * error on the error probe.  We bump an
-				 * error counter to at least indicate that
-				 * this condition happened.
-				 */
-				dtrace_error(&state->dts_dblerrors);
-				continue;
-			}
-
-			if (vtime) {
-				/*
-				 * Before recursing on dtrace_probe(), we
-				 * need to explicitly clear out our start
-				 * time to prevent it from being accumulated
-				 * into t_dtrace_vtime.
-				 */
-				curthread->t_dtrace_start = 0;
-			}
-
-			/*
-			 * Iterate over the actions to figure out which action
-			 * we were processing when we experienced the error.
-			 * Note that act points _past_ the faulting action; if
-			 * act is ecb->dte_action, the fault was in the
-			 * predicate, if it's ecb->dte_action->dta_next it's
-			 * in action #1, and so on.
-			 */
-			for (err = ecb->dte_action, ndx = 0;
-			    err != act; err = err->dta_next, ndx++)
-				continue;
-
-			dtrace_probe_error(state, ecb->dte_epid, ndx,
-			    (mstate.dtms_present & DTRACE_MSTATE_FLTOFFS) ?
-			    mstate.dtms_fltoffs : -1, DTRACE_FLAGS2FLT(*flags),
-			    cpu_core[cpuid].cpuc_dtrace_illval);
-
-			continue;
-		}
-
-		if (!committed)
-			buf->dtb_offset = offs + ecb->dte_size;
-	}
-
-#if 0
-	if (vtime)
-		curthread->t_dtrace_start = dtrace_gethrtime();
-
-	dtrace_interrupt_enable(cookie);
-#endif
 }
 
 /*
@@ -3812,6 +3181,638 @@ dtrace_speculation(dtrace_state_t *state)
 
 	return (0);
 }
+
+/*
+ * If you're looking for the epicenter of DTrace, you just found it.  This
+ * is the function called by the provider to fire a probe -- from which all
+ * subsequent probe-context DTrace activity emanates.
+ */
+void
+dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
+    uintptr_t arg2, uintptr_t arg3, uintptr_t arg4)
+{
+	dtrace_icookie_t cookie;
+	dtrace_probe_t *probe;
+	dtrace_mstate_t mstate;
+	dtrace_ecb_t *ecb;
+	dtrace_action_t *act;
+	intptr_t offs;
+	size_t size;
+	int vtime, onintr;
+	volatile uint16_t *flags;
+	hrtime_t now;
+
+	probe = dtrace_probes[id - 1];
+
+	/*
+	 * TODO: We need a way to ask for a timestamp from the kernel in an
+	 * efficient, but safe way. This should also be as high resolution as
+	 * possible.
+	 */
+#if 0
+	now = mstate.dtms_timestamp = dtrace_gethrtime();
+	mstate.dtms_present |= DTRACE_MSTATE_TIMESTAMP;
+	vtime = dtrace_vtime_references != 0;
+
+	if (vtime && curthread->t_dtrace_start)
+		curthread->t_dtrace_vtime += now - curthread->t_dtrace_start;
+#endif
+
+	mstate.dtms_difo = NULL;
+	mstate.dtms_probe = probe;
+	mstate.dtms_strtok = 0;
+	mstate.dtms_arg[0] = arg0;
+	mstate.dtms_arg[1] = arg1;
+	mstate.dtms_arg[2] = arg2;
+	mstate.dtms_arg[3] = arg3;
+	mstate.dtms_arg[4] = arg4;
+
+	/*
+	 * XXX: This might become something else eventually...?
+	 */
+#if 0
+	flags = (volatile uint16_t *)&cpu_core[cpuid].cpuc_dtrace_flags;
+#endif
+
+	for (ecb = probe->dtpr_ecb; ecb != NULL; ecb = ecb->dte_next) {
+		dtrace_predicate_t *pred = ecb->dte_predicate;
+		dtrace_state_t *state = ecb->dte_state;
+		/*
+		 * TODO: Figure out how to best aggregate (probably by arbitrary
+		 * things??)
+		 */
+		dtrace_buffer_t *buf = &state->dts_buffer;
+		dtrace_buffer_t *aggbuf = &state->dts_aggbuffer;
+		dtrace_vstate_t *vstate = &state->dts_vstate;
+		dtrace_provider_t *prov = probe->dtpr_provider;
+		uint64_t tracememsize = 0;
+		int committed = 0;
+		caddr_t tomax;
+
+		/*
+		 * A little subtlety with the following (seemingly innocuous)
+		 * declaration of the automatic 'val':  by looking at the
+		 * code, you might think that it could be declared in the
+		 * action processing loop, below.  (That is, it's only used in
+		 * the action processing loop.)  However, it must be declared
+		 * out of that scope because in the case of DIF expression
+		 * arguments to aggregating actions, one iteration of the
+		 * action loop will use the last iteration's value.
+		 */
+		uint64_t val = 0;
+
+		mstate.dtms_present = DTRACE_MSTATE_ARGS | DTRACE_MSTATE_PROBE;
+		mstate.dtms_getf = NULL;
+
+		*flags &= ~CPU_DTRACE_ERROR;
+
+		if (prov == dtrace_provider) {
+			/*
+			 * If dtrace itself is the provider of this probe,
+			 * we're only going to continue processing the ECB if
+			 * arg0 (the dtrace_state_t) is equal to the ECB's
+			 * creating state.  (This prevents disjoint consumers
+			 * from seeing one another's metaprobes.)
+			 */
+			if (arg0 != (uint64_t)(uintptr_t)state)
+				continue;
+		}
+
+		if (state->dts_activity != DTRACE_ACTIVITY_ACTIVE) {
+			/*
+			 * We're not currently active.  If our provider isn't
+			 * the dtrace pseudo provider, we're not interested.
+			 */
+			if (prov != dtrace_provider)
+				continue;
+
+			/*
+			 * Now we must further check if we are in the BEGIN
+			 * probe.  If we are, we will only continue processing
+			 * if we're still in WARMUP -- if one BEGIN enabling
+			 * has invoked the exit() action, we don't want to
+			 * evaluate subsequent BEGIN enablings.
+			 */
+			if (probe->dtpr_id == dtrace_probeid_begin &&
+			    state->dts_activity != DTRACE_ACTIVITY_WARMUP) {
+				assert(state->dts_activity ==
+				    DTRACE_ACTIVITY_DRAINING);
+				continue;
+			}
+		}
+
+		if (ecb->dte_cond) {
+			/*
+			 * If the dte_cond bits indicate that this
+			 * consumer is only allowed to see user-mode firings
+			 * of this probe, call the provider's dtps_usermode()
+			 * entry point to check that the probe was fired
+			 * while in a user context. Skip this ECB if that's
+			 * not the case.
+			 */
+			if ((ecb->dte_cond & DTRACE_COND_USERMODE) &&
+			    prov->dtpv_pops.dtps_usermode(prov->dtpv_arg,
+			    probe->dtpr_id, probe->dtpr_arg) == 0)
+				continue;
+		}
+
+		/*
+		 * TODO: Here we want to enable destructive actions, but it's
+		 * unclear as to how to do so (at least to me). We could set
+		 * some sort of a flag and have a co-processor in the kernel...?
+		 */
+#if 0
+		if (now - state->dts_alive > dtrace_deadman_timeout) {
+			/*
+			 * We seem to be dead.  Unless we (a) have kernel
+			 * destructive permissions (b) have explicitly enabled
+			 * destructive actions and (c) destructive actions have
+			 * not been disabled, we're going to transition into
+			 * the KILLED state, from which no further processing
+			 * on this state will be performed.
+			 */
+			if (!dtrace_priv_kernel_destructive(state) ||
+			    !state->dts_cred.dcr_destructive ||
+			    dtrace_destructive_disallow) {
+				void *activity = &state->dts_activity;
+				dtrace_activity_t current;
+
+				do {
+					current = state->dts_activity;
+				} while (dtrace_cas32(activity, current,
+				    DTRACE_ACTIVITY_KILLED) != current);
+
+				continue;
+			}
+		}
+#endif
+
+		if ((offs = dtrace_buffer_reserve(buf, ecb->dte_needed,
+		    ecb->dte_alignment, state, &mstate)) < 0)
+			continue;
+
+
+		tomax = buf->dtb_tomax;
+		assert(tomax != NULL);
+
+		/*
+		 * TODO: Figure out how to timestamp
+		 */
+#if 0
+		if (ecb->dte_size != 0) {
+			dtrace_rechdr_t dtrh;
+			if (!(mstate.dtms_present & DTRACE_MSTATE_TIMESTAMP)) {
+				mstate.dtms_timestamp = dtrace_gethrtime();
+				mstate.dtms_present |= DTRACE_MSTATE_TIMESTAMP;
+			}
+			ASSERT3U(ecb->dte_size, >=, sizeof (dtrace_rechdr_t));
+			dtrh.dtrh_epid = ecb->dte_epid;
+			DTRACE_RECORD_STORE_TIMESTAMP(&dtrh,
+			    mstate.dtms_timestamp);
+			*((dtrace_rechdr_t *)(tomax + offs)) = dtrh;
+		}
+#endif
+
+		mstate.dtms_epid = ecb->dte_epid;
+		mstate.dtms_present |= DTRACE_MSTATE_EPID;
+
+		if (state->dts_cred.dcr_visible & DTRACE_CRV_KERNEL)
+			mstate.dtms_access = DTRACE_ACCESS_KERNEL;
+		else
+			mstate.dtms_access = 0;
+
+		if (pred != NULL) {
+			dtrace_difo_t *dp = pred->dtp_difo;
+			uint64_t rval;
+
+			rval = dtrace_dif_emulate(dp, &mstate, vstate, state);
+
+			if (!(*flags & CPU_DTRACE_ERROR) && !rval) {
+				dtrace_cacheid_t cid = probe->dtpr_predcache;
+
+				if (cid != DTRACE_CACHEIDNONE && !onintr) {
+					/*
+					 * Update the predicate cache...
+					 */
+					assert(cid == pred->dtp_cacheid);
+					t_predcache = cid;
+				}
+
+				continue;
+			}
+		}
+
+		for (act = ecb->dte_action; !(*flags & CPU_DTRACE_ERROR) &&
+		    act != NULL; act = act->dta_next) {
+			size_t valoffs;
+			dtrace_difo_t *dp;
+			dtrace_recdesc_t *rec = &act->dta_rec;
+
+			size = rec->dtrd_size;
+			valoffs = offs + rec->dtrd_offset;
+
+			if (DTRACEACT_ISAGG(act->dta_kind)) {
+				uint64_t v = 0xbad;
+				dtrace_aggregation_t *agg;
+
+				agg = (dtrace_aggregation_t *)act;
+
+				if ((dp = act->dta_difo) != NULL)
+					v = dtrace_dif_emulate(dp,
+					    &mstate, vstate, state);
+
+				if (*flags & CPU_DTRACE_ERROR)
+					continue;
+
+				/*
+				 * Note that we always pass the expression
+				 * value from the previous iteration of the
+				 * action loop.  This value will only be used
+				 * if there is an expression argument to the
+				 * aggregating action, denoted by the
+				 * dtag_hasarg field.
+				 */
+				dtrace_aggregate(agg, buf,
+				    offs, aggbuf, v, val);
+				continue;
+			}
+
+			switch (act->dta_kind) {
+			case DTRACEACT_STOP:
+				if (dtrace_priv_proc_destructive(state))
+					dtrace_action_stop();
+				continue;
+
+			case DTRACEACT_BREAKPOINT:
+				if (dtrace_priv_kernel_destructive(state))
+					dtrace_action_breakpoint(ecb);
+				continue;
+
+			case DTRACEACT_PANIC:
+				if (dtrace_priv_kernel_destructive(state))
+					dtrace_action_panic(ecb);
+				continue;
+
+			case DTRACEACT_STACK:
+				if (!dtrace_priv_kernel(state))
+					continue;
+
+				dtrace_getpcstack((pc_t *)(tomax + valoffs),
+				    size / sizeof (pc_t), probe->dtpr_aframes,
+				    DTRACE_ANCHORED(probe) ? NULL :
+				    (uint32_t *)arg0);
+				continue;
+
+			case DTRACEACT_JSTACK:
+			case DTRACEACT_USTACK:
+				if (!dtrace_priv_proc(state))
+					continue;
+
+				/*
+				 * See comment in DIF_VAR_PID.
+				 */
+				if (DTRACE_ANCHORED(mstate.dtms_probe) &&
+				    CPU_ON_INTR(CPU)) {
+					int depth = DTRACE_USTACK_NFRAMES(
+					    rec->dtrd_arg) + 1;
+
+					dtrace_bzero((void *)(tomax + valoffs),
+					    DTRACE_USTACK_STRSIZE(rec->dtrd_arg)
+					    + depth * sizeof (uint64_t));
+
+					continue;
+				}
+
+				if (DTRACE_USTACK_STRSIZE(rec->dtrd_arg) != 0 &&
+				    curproc->p_dtrace_helpers != NULL) {
+					/*
+					 * This is the slow path -- we have
+					 * allocated string space, and we're
+					 * getting the stack of a process that
+					 * has helpers.  Call into a separate
+					 * routine to perform this processing.
+					 */
+					dtrace_action_ustack(&mstate, state,
+					    (uint64_t *)(tomax + valoffs),
+					    rec->dtrd_arg);
+					continue;
+				}
+
+				DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+				dtrace_getupcstack((uint64_t *)
+				    (tomax + valoffs),
+				    DTRACE_USTACK_NFRAMES(rec->dtrd_arg) + 1);
+				DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+				continue;
+
+			default:
+				break;
+			}
+
+			dp = act->dta_difo;
+			assert(dp != NULL);
+
+			val = dtrace_dif_emulate(dp, &mstate, vstate, state);
+
+			if (*flags & CPU_DTRACE_ERROR)
+				continue;
+
+			switch (act->dta_kind) {
+			case DTRACEACT_SPECULATE: {
+				dtrace_rechdr_t *dtrh;
+
+				assert(buf == &state->dts_buffer[cpuid]);
+				buf = dtrace_speculation_buffer(state,
+				    cpuid, val);
+
+				if (buf == NULL) {
+					*flags |= CPU_DTRACE_DROP;
+					continue;
+				}
+
+				offs = dtrace_buffer_reserve(buf,
+				    ecb->dte_needed, ecb->dte_alignment,
+				    state, NULL);
+
+				if (offs < 0) {
+					*flags |= CPU_DTRACE_DROP;
+					continue;
+				}
+
+				tomax = buf->dtb_tomax;
+				assert(tomax != NULL);
+
+				if (ecb->dte_size == 0)
+					continue;
+
+				ASSERT3U(ecb->dte_size, >=,
+				    sizeof (dtrace_rechdr_t));
+				dtrh = ((void *)(tomax + offs));
+				dtrh->dtrh_epid = ecb->dte_epid;
+				/*
+				 * When the speculation is committed, all of
+				 * the records in the speculative buffer will
+				 * have their timestamps set to the commit
+				 * time.  Until then, it is set to a sentinel
+				 * value, for debugability.
+				 */
+				DTRACE_RECORD_STORE_TIMESTAMP(dtrh, UINT64_MAX);
+				continue;
+			}
+
+			case DTRACEACT_PRINTM: {
+				/* The DIF returns a 'memref'. */
+				uintptr_t *memref = (uintptr_t *)(uintptr_t) val;
+
+				/* Get the size from the memref. */
+				size = memref[1];
+
+				/*
+				 * Check if the size exceeds the allocated
+				 * buffer size.
+				 */
+				if (size + sizeof(uintptr_t) > dp->dtdo_rtype.dtdt_size) {
+					/* Flag a drop! */
+					*flags |= CPU_DTRACE_DROP;
+					continue;
+				}
+
+				/* Store the size in the buffer first. */
+				DTRACE_STORE(uintptr_t, tomax,
+				    valoffs, size);
+
+				/*
+				 * Offset the buffer address to the start
+				 * of the data.
+				 */
+				valoffs += sizeof(uintptr_t);
+
+				/*
+				 * Reset to the memory address rather than
+				 * the memref array, then let the BYREF
+				 * code below do the work to store the 
+				 * memory data in the buffer.
+				 */
+				val = memref[0];
+				break;
+			}
+
+			case DTRACEACT_CHILL:
+				if (dtrace_priv_kernel_destructive(state))
+					dtrace_action_chill(&mstate, val);
+				continue;
+
+			case DTRACEACT_RAISE:
+				if (dtrace_priv_proc_destructive(state))
+					dtrace_action_raise(val);
+				continue;
+
+			case DTRACEACT_COMMIT:
+				assert(!committed);
+
+				/*
+				 * We need to commit our buffer state.
+				 */
+				if (ecb->dte_size)
+					buf->dtb_offset = offs + ecb->dte_size;
+				buf = &state->dts_buffer[cpuid];
+				dtrace_speculation_commit(state, cpuid, val);
+				committed = 1;
+				continue;
+
+			case DTRACEACT_DISCARD:
+				dtrace_speculation_discard(state, cpuid, val);
+				continue;
+
+			case DTRACEACT_DIFEXPR:
+			case DTRACEACT_LIBACT:
+			case DTRACEACT_PRINTF:
+			case DTRACEACT_PRINTA:
+			case DTRACEACT_SYSTEM:
+			case DTRACEACT_FREOPEN:
+			case DTRACEACT_TRACEMEM:
+				break;
+
+			case DTRACEACT_TRACEMEM_DYNSIZE:
+				tracememsize = val;
+				break;
+
+			case DTRACEACT_SYM:
+			case DTRACEACT_MOD:
+				if (!dtrace_priv_kernel(state))
+					continue;
+				break;
+
+			case DTRACEACT_USYM:
+			case DTRACEACT_UMOD:
+			case DTRACEACT_UADDR: {
+#ifdef illumos
+				struct pid *pid = curthread->t_procp->p_pidp;
+#endif
+
+				if (!dtrace_priv_proc(state))
+					continue;
+
+				DTRACE_STORE(uint64_t, tomax,
+#ifdef illumos
+				    valoffs, (uint64_t)pid->pid_id);
+#else
+				    valoffs, (uint64_t) curproc->p_pid);
+#endif
+				DTRACE_STORE(uint64_t, tomax,
+				    valoffs + sizeof (uint64_t), val);
+
+				continue;
+			}
+
+			case DTRACEACT_EXIT: {
+				/*
+				 * For the exit action, we are going to attempt
+				 * to atomically set our activity to be
+				 * draining.  If this fails (either because
+				 * another CPU has beat us to the exit action,
+				 * or because our current activity is something
+				 * other than ACTIVE or WARMUP), we will
+				 * continue.  This assures that the exit action
+				 * can be successfully recorded at most once
+				 * when we're in the ACTIVE state.  If we're
+				 * encountering the exit() action while in
+				 * COOLDOWN, however, we want to honor the new
+				 * status code.  (We know that we're the only
+				 * thread in COOLDOWN, so there is no race.)
+				 */
+				void *activity = &state->dts_activity;
+				dtrace_activity_t current = state->dts_activity;
+
+				if (current == DTRACE_ACTIVITY_COOLDOWN)
+					break;
+
+				if (current != DTRACE_ACTIVITY_WARMUP)
+					current = DTRACE_ACTIVITY_ACTIVE;
+
+				if (dtrace_cas32(activity, current,
+				    DTRACE_ACTIVITY_DRAINING) != current) {
+					*flags |= CPU_DTRACE_DROP;
+					continue;
+				}
+
+				break;
+			}
+
+			default:
+				assert(0);
+			}
+
+			if (dp->dtdo_rtype.dtdt_flags & DIF_TF_BYREF ||
+			    dp->dtdo_rtype.dtdt_flags & DIF_TF_BYUREF) {
+				uintptr_t end = valoffs + size;
+
+				if (tracememsize != 0 &&
+				    valoffs + tracememsize < end) {
+					end = valoffs + tracememsize;
+					tracememsize = 0;
+				}
+
+				if (dp->dtdo_rtype.dtdt_flags & DIF_TF_BYREF &&
+				    !dtrace_vcanload((void *)(uintptr_t)val,
+				    &dp->dtdo_rtype, NULL, &mstate, vstate))
+					continue;
+
+				dtrace_store_by_ref(dp, tomax, size, &valoffs,
+				    &val, end, act->dta_intuple,
+				    dp->dtdo_rtype.dtdt_flags & DIF_TF_BYREF ?
+				    DIF_TF_BYREF: DIF_TF_BYUREF);
+				continue;
+			}
+
+			switch (size) {
+			case 0:
+				break;
+
+			case sizeof (uint8_t):
+				DTRACE_STORE(uint8_t, tomax, valoffs, val);
+				break;
+			case sizeof (uint16_t):
+				DTRACE_STORE(uint16_t, tomax, valoffs, val);
+				break;
+			case sizeof (uint32_t):
+				DTRACE_STORE(uint32_t, tomax, valoffs, val);
+				break;
+			case sizeof (uint64_t):
+				DTRACE_STORE(uint64_t, tomax, valoffs, val);
+				break;
+			default:
+				/*
+				 * Any other size should have been returned by
+				 * reference, not by value.
+				 */
+				assert(0);
+				break;
+			}
+		}
+
+		if (*flags & CPU_DTRACE_DROP)
+			continue;
+
+		if (*flags & CPU_DTRACE_FAULT) {
+			int ndx;
+			dtrace_action_t *err;
+
+			buf->dtb_errors++;
+
+			if (probe->dtpr_id == dtrace_probeid_error) {
+				/*
+				 * There's nothing we can do -- we had an
+				 * error on the error probe.  We bump an
+				 * error counter to at least indicate that
+				 * this condition happened.
+				 */
+				dtrace_error(&state->dts_dblerrors);
+				continue;
+			}
+
+			if (vtime) {
+				/*
+				 * Before recursing on dtrace_probe(), we
+				 * need to explicitly clear out our start
+				 * time to prevent it from being accumulated
+				 * into t_dtrace_vtime.
+				 */
+				curthread->t_dtrace_start = 0;
+			}
+
+			/*
+			 * Iterate over the actions to figure out which action
+			 * we were processing when we experienced the error.
+			 * Note that act points _past_ the faulting action; if
+			 * act is ecb->dte_action, the fault was in the
+			 * predicate, if it's ecb->dte_action->dta_next it's
+			 * in action #1, and so on.
+			 */
+			for (err = ecb->dte_action, ndx = 0;
+			    err != act; err = err->dta_next, ndx++)
+				continue;
+
+			dtrace_probe_error(state, ecb->dte_epid, ndx,
+			    (mstate.dtms_present & DTRACE_MSTATE_FLTOFFS) ?
+			    mstate.dtms_fltoffs : -1, DTRACE_FLAGS2FLT(*flags),
+			    cpu_core[cpuid].cpuc_dtrace_illval);
+
+			continue;
+		}
+
+		if (!committed)
+			buf->dtb_offset = offs + ecb->dte_size;
+	}
+
+#if 0
+	if (vtime)
+		curthread->t_dtrace_start = dtrace_gethrtime();
+
+	dtrace_interrupt_enable(cookie);
+#endif
+}
+
 
 /*
  * DTrace ECB Functions
