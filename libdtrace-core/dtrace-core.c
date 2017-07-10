@@ -6697,6 +6697,7 @@ inetout:	regs[rd] = (uintptr_t)end + 1;
 		break;
 	}
 
+#if 0
 #ifndef illumos
 	case DIF_SUBR_MEMSTR: {
 		char *str = (char *)mstate->dtms_scratch_ptr;
@@ -6734,6 +6735,7 @@ inetout:	regs[rd] = (uintptr_t)end + 1;
 		mstate->dtms_scratch_ptr += size;
 		break;
 	}
+#endif
 #endif
 	}
 }
