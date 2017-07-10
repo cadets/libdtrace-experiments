@@ -8,6 +8,7 @@
 #include "dtrace.h"
 #include "dtrace_impl.h"
 #include "unr_shim.h"
+#include "note_shim.h"
 
 #define	WPRINTF(...) (printf("Warning: " __VA_ARGS__))
 #define	DTRACE_ISALPHA(c)	\
@@ -30,6 +31,26 @@
 #define	IS_P2ALIGNED(v, a) ((((uintptr_t)(v)) & ((uintptr_t)(a) - 1)) == 0)
 #define	DTRACE_STORE(type, tomax, offset, what) \
 	*((type *)((uintptr_t)(tomax) + (uintptr_t)offset)) = (type)(what);
+
+/*
+ * Userspace shim...
+ */
+typedef int boolean_t;
+
+#ifndef TRUE
+#define TRUE 1
+#endif
+
+#ifndef FALSE
+#define FALSE 0
+#endif
+
+#ifndef B_FALSE
+#define	B_FALSE	FALSE
+#endif
+#ifndef B_TRUE
+#define	B_TRUE	TRUE
+#endif
 /*
  * DTrace Macros and Constants
  *
@@ -50,6 +71,23 @@
 #define	DTRACE_HASHEQ(hash, lhs, rhs)	\
 	(strcmp(*((char **)((uintptr_t)(lhs) + (hash)->dth_stroffs)), \
 	    *((char **)((uintptr_t)(rhs) + (hash)->dth_stroffs))) == 0)
+/*
+ * Test whether a range of memory starting at testaddr of size testsz falls
+ * within the range of memory described by addr, sz.  We take care to avoid
+ * problems with overflow and underflow of the unsigned quantities, and
+ * disallow all negative sizes.  Ranges of size 0 are allowed.
+ */
+#define	DTRACE_INRANGE(testaddr, testsz, baseaddr, basesz) \
+	((testaddr) - (uintptr_t)(baseaddr) < (basesz) && \
+	(testaddr) + (testsz) - (uintptr_t)(baseaddr) <= (basesz) && \
+	(testaddr) + (testsz) >= (testaddr))
+
+#define	DTRACE_RANGE_REMAIN(remp, addr, baseaddr, basesz)		\
+do {									\
+	if ((remp) != NULL) {						\
+		*(remp) = (uintptr_t)(baseaddr) + (basesz) - (addr);	\
+	}								\
+_NOTE(CONSTCOND) } while (0)
 
 /*
  * Here we define the userspace compat shim regarding the CPU_* macros that are
