@@ -1,9 +1,13 @@
+#include <sys/types.h>
+
 #include <assert.h>
 #include <errno.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "dtrace.h"
 #include "dtrace_impl.h"
@@ -34,6 +38,10 @@
 #define	isdigit(ch)	((ch) >= '0' && (ch) <= '9')
 #define	isxdigit(ch)	(isdigit(ch) || ((ch) >= 'a' && (ch) <= 'f') || \
 			((ch) >= 'A' && (ch) <= 'F'))
+#define	DIGIT(x)	\
+	(isdigit(x) ? (x) - '0' : islower(x) ? (x) + 10 - 'a' : (x) + 10 - 'A')
+#define	lisalnum(x)	\
+	(isdigit(x) || ((x) >= 'a' && (x) <= 'z') || ((x) >= 'A' && (x) <= 'Z'))
 
 /*
  * Userspace shim...
@@ -1822,6 +1830,12 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 static void
 dtrace_action_breakpoint(dtrace_ecb_t *ecb)
 {
+	/*
+	 * TODO: This might be doable with the use of the debug.kdb.enter sysctl
+	 * in the case of the kernel and lldb when talking about different
+	 * processes.
+	 */
+#if 0
 	dtrace_probe_t *probe = ecb->dte_probe;
 	dtrace_provider_t *prov = probe->dtpr_provider;
 	char c[DTRACE_FULLNAMELEN + 80], *str;
@@ -1883,11 +1897,17 @@ dtrace_action_breakpoint(dtrace_ecb_t *ecb)
 #else
 	kdb_enter(KDB_WHY_DTRACE, "breakpoint action");
 #endif
+#endif
 }
 
 static void
 dtrace_action_panic(dtrace_ecb_t *ecb)
 {
+	/*
+	 * There is no actual reason to panic. We will just exit(1) for now, but
+	 * we should spawn a debugger.
+	 */
+#if 0
 	dtrace_probe_t *probe = ecb->dte_probe;
 
 	/*
@@ -1912,11 +1932,19 @@ dtrace_action_panic(dtrace_ecb_t *ecb)
 	dtrace_panic("dtrace: panic action at probe %s:%s:%s:%s (ecb %p)",
 	    probe->dtpr_provider->dtpv_name, probe->dtpr_mod,
 	    probe->dtpr_func, probe->dtpr_name, (void *)ecb);
+#endif
+	exit(1);
 }
 
 static void
 dtrace_action_raise(uint64_t sig)
 {
+	/*
+	 * FIXME: This is not the current process, we actually want to know the
+	 * PID of this process eventually, but for now, we just call getpid().
+	 */
+	kill(getpid(), sig);
+#if 0
 	if (dtrace_destructive_disallow)
 		return;
 
@@ -1941,11 +1969,19 @@ dtrace_action_raise(uint64_t sig)
 	kern_psignal(p, sig);
 	PROC_UNLOCK(p);
 #endif
+#endif
 }
 
 static void
 dtrace_action_stop(void)
 {
+	/*
+	 * FIXME: Much like sending an arbitrary signal, here we also want to
+	 * figure out which PID we should send this to. For now, we just stop
+	 * the main tracing process (BAD BAD BAD)
+	 */
+	exit(0);
+#if 0
 	if (dtrace_destructive_disallow)
 		return;
 
@@ -1960,6 +1996,7 @@ dtrace_action_stop(void)
 	PROC_LOCK(p);
 	kern_psignal(p, SIGSTOP);
 	PROC_UNLOCK(p);
+#endif
 #endif
 }
 
