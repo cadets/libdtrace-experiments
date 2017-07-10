@@ -3644,6 +3644,11 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 		 * TODO: Figure out how to best aggregate (probably by arbitrary
 		 * things??)
 		 */
+		/*
+		 * FIXME: The state structure has lots of buffers on a per-CPU
+		 * basis. We want it on a per-* basis -- but initially, we just
+		 * want one.
+		 */
 		dtrace_buffer_t *buf = &state->dts_buffer;
 		dtrace_buffer_t *aggbuf = &state->dts_aggbuffer;
 		dtrace_vstate_t *vstate = &state->dts_vstate;
