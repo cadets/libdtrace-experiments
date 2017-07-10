@@ -38,6 +38,8 @@
 #define	isdigit(ch)	((ch) >= '0' && (ch) <= '9')
 #define	isxdigit(ch)	(isdigit(ch) || ((ch) >= 'a' && (ch) <= 'f') || \
 			((ch) >= 'A' && (ch) <= 'F'))
+#define	islower(ch)	((ch) >= 'a' && (ch) <= 'z')
+#define	isupper(ch)	((ch) >= 'A' && (ch) <= 'Z')
 #define	DIGIT(x)	\
 	(isdigit(x) ? (x) - '0' : islower(x) ? (x) + 10 - 'a' : (x) + 10 - 'A')
 #define	lisalnum(x)	\
@@ -146,6 +148,10 @@ static int		dtrace_nprobes;		/* number of probes */
 static int		dtrace_nprovs;		/* number of providers */
 static struct unrhdr	*dtrace_arena;		/* Probe ID number.     */
 static struct mtx	dtrace_unr_mtx;
+static int		dtrace_dynvar_failclean; /* dynvars failed to clean */
+static dtrace_toxrange_t *dtrace_toxrange;	/* toxic range array */
+static int		dtrace_toxranges;	/* number of toxic ranges */
+static int		dtrace_toxranges_max;	/* size of toxic range array */
 /*
  * FIXME: This is so not necessary.
  */
@@ -184,6 +190,8 @@ static int dtrace_canload_remains(uint64_t, size_t, size_t *,
     dtrace_mstate_t *, dtrace_vstate_t *);
 static int dtrace_canstore_remains(uint64_t, size_t, size_t *,
     dtrace_mstate_t *, dtrace_vstate_t *);
+
+typedef int processorid_t; /* we need this to in order to compile */
 
 /*
  * This is not a bug
@@ -773,6 +781,144 @@ dtrace_strlen(const char *s, size_t lim)
 	}
 
 	return (len);
+}
+
+/*
+ * Check if an address falls within a toxic region.
+ */
+static int
+dtrace_istoxic(uintptr_t kaddr, size_t size)
+{
+	uintptr_t taddr, tsize;
+	int i;
+
+	for (i = 0; i < dtrace_toxranges; i++) {
+		taddr = dtrace_toxrange[i].dtt_base;
+		tsize = dtrace_toxrange[i].dtt_limit - taddr;
+
+		if (kaddr - taddr < tsize) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_BADADDR);
+			cpuc_dtrace_illval = kaddr;
+			return (1);
+		}
+
+		if (taddr - kaddr < size) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_BADADDR);
+			cpuc_dtrace_illval = taddr;
+			return (1);
+		}
+	}
+
+	return (0);
+}
+
+/*
+ * Copy src to dst using safe memory accesses.  The src is assumed to be unsafe
+ * memory specified by the DIF program.  The dst is assumed to be safe memory
+ * that we can store to directly because it is managed by DTrace.  As with
+ * standard bcopy, overlapping copies are handled properly.
+ */
+static void
+dtrace_bcopy(const void *src, void *dst, size_t len)
+{
+	if (len != 0) {
+		uint8_t *s1 = dst;
+		const uint8_t *s2 = src;
+
+		if (s1 <= s2) {
+			do {
+				*s1++ = dtrace_load8((uintptr_t)s2++);
+			} while (--len != 0);
+		} else {
+			s2 += len;
+			s1 += len;
+
+			do {
+				*--s1 = dtrace_load8((uintptr_t)--s2);
+			} while (--len != 0);
+		}
+	}
+}
+
+/*
+ * Copy src to dst using safe memory accesses, up to either the specified
+ * length, or the point that a nul byte is encountered.  The src is assumed to
+ * be unsafe memory specified by the DIF program.  The dst is assumed to be
+ * safe memory that we can store to directly because it is managed by DTrace.
+ * Unlike dtrace_bcopy(), overlapping regions are not handled.
+ */
+static void
+dtrace_strcpy(const void *src, void *dst, size_t len)
+{
+	if (len != 0) {
+		uint8_t *s1 = dst, c;
+		const uint8_t *s2 = src;
+
+		do {
+			*s1++ = c = dtrace_load8((uintptr_t)s2++);
+		} while (--len != 0 && c != '\0');
+	}
+}
+
+/*
+ * Copy src to dst, deriving the size and type from the specified (BYREF)
+ * variable type.  The src is assumed to be unsafe memory specified by the DIF
+ * program.  The dst is assumed to be DTrace variable memory that is of the
+ * specified type; we assume that we can store to directly.
+ */
+static void
+dtrace_vcopy(void *src, void *dst, dtrace_diftype_t *type, size_t limit)
+{
+	ASSERT(type->dtdt_flags & DIF_TF_BYREF);
+
+	if (type->dtdt_kind == DIF_TYPE_STRING) {
+		dtrace_strcpy(src, dst, MIN(type->dtdt_size, limit));
+	} else {
+		dtrace_bcopy(src, dst, MIN(type->dtdt_size, limit));
+	}
+}
+
+/*
+ * Compare s1 to s2 using safe memory accesses.  The s1 data is assumed to be
+ * unsafe memory specified by the DIF program.  The s2 data is assumed to be
+ * safe memory that we can access directly because it is managed by DTrace.
+ */
+static int
+dtrace_bcmp(const void *s1, const void *s2, size_t len)
+{
+	volatile uint16_t *flags;
+
+	flags = (volatile uint16_t *)&cpuc_dtrace_flags;
+
+	if (s1 == s2)
+		return (0);
+
+	if (s1 == NULL || s2 == NULL)
+		return (1);
+
+	if (s1 != s2 && len != 0) {
+		const uint8_t *ps1 = s1;
+		const uint8_t *ps2 = s2;
+
+		do {
+			if (dtrace_load8((uintptr_t)ps1++) != *ps2++)
+				return (1);
+		} while (--len != 0 && !(*flags & CPU_DTRACE_FAULT));
+	}
+	return (0);
+}
+
+/*
+ * Zero the specified region using a simple byte-by-byte loop.  Note that this
+ * is for safe DTrace-managed memory only.
+ */
+static void
+dtrace_bzero(void *dst, size_t len)
+{
+	uchar_t *cp;
+
+	for (cp = dst; len != 0; len--)
+		*cp++ = 0;
 }
 
 static void
@@ -2910,21 +3056,6 @@ dtrace_difo_duplicate(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 	return (new);
 }
 
-
-
-/*
- * Zero the specified region using a simple byte-by-byte loop.  Note that this
- * is for safe DTrace-managed memory only.
- */
-static void
-dtrace_bzero(void *dst, size_t len)
-{
-	uchar_t *cp;
-
-	for (cp = dst; len != 0; len--)
-		*cp++ = 0;
-}
-
 /*
  * DTrace Format Functions
  */
@@ -3508,7 +3639,7 @@ dtrace_dynvar(dtrace_dstate_t *dstate, uint_t nkeys,
 	uint64_t hashval = DTRACE_DYNHASH_VALID;
 	dtrace_dynhash_t *hash = dstate->dtds_hash;
 	dtrace_dynvar_t *free, *new_free, *next, *dvar, *start, *prev = NULL;
-	processorid_t me = curcpu, cpu = me;
+	processorid_t me = 1, cpu = me;
 	dtrace_dstate_percpu_t *dcpu = &dstate->dtds_percpu[me];
 	size_t bucket, ksize;
 	size_t chunksize = dstate->dtds_chunksize;
@@ -4453,6 +4584,938 @@ dtrace_speculation(dtrace_state_t *state)
 
 	return (0);
 }
+
+/*
+ * This routine commits an active speculation.  If the specified speculation
+ * is not in a valid state to perform a commit(), this routine will silently do
+ * nothing.  The state of the specified speculation is transitioned according
+ * to the state transition diagram outlined in <sys/dtrace_impl.h>
+ */
+static void
+dtrace_speculation_commit(dtrace_state_t *state, processorid_t cpu,
+    dtrace_specid_t which)
+{
+	dtrace_speculation_t *spec;
+	dtrace_buffer_t *src, *dest;
+	uintptr_t daddr, saddr, dlimit, slimit;
+	dtrace_speculation_state_t current, new = 0;
+	intptr_t offs;
+	uint64_t timestamp;
+
+	if (which == 0)
+		return;
+
+	if (which > state->dts_nspeculations) {
+		cpu_core[cpu].cpuc_dtrace_flags |= CPU_DTRACE_ILLOP;
+		return;
+	}
+
+	spec = &state->dts_speculations[which - 1];
+	src = &spec->dtsp_buffer[cpu];
+	dest = &state->dts_buffer[cpu];
+
+	do {
+		current = spec->dtsp_state;
+
+		if (current == DTRACESPEC_COMMITTINGMANY)
+			break;
+
+		switch (current) {
+		case DTRACESPEC_INACTIVE:
+		case DTRACESPEC_DISCARDING:
+			return;
+
+		case DTRACESPEC_COMMITTING:
+			/*
+			 * This is only possible if we are (a) commit()'ing
+			 * without having done a prior speculate() on this CPU
+			 * and (b) racing with another commit() on a different
+			 * CPU.  There's nothing to do -- we just assert that
+			 * our offset is 0.
+			 */
+			ASSERT(src->dtb_offset == 0);
+			return;
+
+		case DTRACESPEC_ACTIVE:
+			new = DTRACESPEC_COMMITTING;
+			break;
+
+		case DTRACESPEC_ACTIVEONE:
+			/*
+			 * This speculation is active on one CPU.  If our
+			 * buffer offset is non-zero, we know that the one CPU
+			 * must be us.  Otherwise, we are committing on a
+			 * different CPU from the speculate(), and we must
+			 * rely on being asynchronously cleaned.
+			 */
+			if (src->dtb_offset != 0) {
+				new = DTRACESPEC_COMMITTING;
+				break;
+			}
+			/*FALLTHROUGH*/
+
+		case DTRACESPEC_ACTIVEMANY:
+			new = DTRACESPEC_COMMITTINGMANY;
+			break;
+
+		default:
+			ASSERT(0);
+		}
+	} while (dtrace_cas32((uint32_t *)&spec->dtsp_state,
+	    current, new) != current);
+
+	/*
+	 * We have set the state to indicate that we are committing this
+	 * speculation.  Now reserve the necessary space in the destination
+	 * buffer.
+	 */
+	if ((offs = dtrace_buffer_reserve(dest, src->dtb_offset,
+	    sizeof (uint64_t), state, NULL)) < 0) {
+		dtrace_buffer_drop(dest);
+		goto out;
+	}
+
+	/*
+	 * We have sufficient space to copy the speculative buffer into the
+	 * primary buffer.  First, modify the speculative buffer, filling
+	 * in the timestamp of all entries with the current time.  The data
+	 * must have the commit() time rather than the time it was traced,
+	 * so that all entries in the primary buffer are in timestamp order.
+	 */
+	timestamp = dtrace_gethrtime();
+	saddr = (uintptr_t)src->dtb_tomax;
+	slimit = saddr + src->dtb_offset;
+	while (saddr < slimit) {
+		size_t size;
+		dtrace_rechdr_t *dtrh = (dtrace_rechdr_t *)saddr;
+
+		if (dtrh->dtrh_epid == DTRACE_EPIDNONE) {
+			saddr += sizeof (dtrace_epid_t);
+			continue;
+		}
+		ASSERT3U(dtrh->dtrh_epid, <=, state->dts_necbs);
+		size = state->dts_ecbs[dtrh->dtrh_epid - 1]->dte_size;
+
+		ASSERT3U(saddr + size, <=, slimit);
+		ASSERT3U(size, >=, sizeof (dtrace_rechdr_t));
+		ASSERT3U(DTRACE_RECORD_LOAD_TIMESTAMP(dtrh), ==, UINT64_MAX);
+
+		DTRACE_RECORD_STORE_TIMESTAMP(dtrh, timestamp);
+
+		saddr += size;
+	}
+
+	/*
+	 * Copy the buffer across.  (Note that this is a
+	 * highly subobtimal bcopy(); in the unlikely event that this becomes
+	 * a serious performance issue, a high-performance DTrace-specific
+	 * bcopy() should obviously be invented.)
+	 */
+	daddr = (uintptr_t)dest->dtb_tomax + offs;
+	dlimit = daddr + src->dtb_offset;
+	saddr = (uintptr_t)src->dtb_tomax;
+
+	/*
+	 * First, the aligned portion.
+	 */
+	while (dlimit - daddr >= sizeof (uint64_t)) {
+		*((uint64_t *)daddr) = *((uint64_t *)saddr);
+
+		daddr += sizeof (uint64_t);
+		saddr += sizeof (uint64_t);
+	}
+
+	/*
+	 * Now any left-over bit...
+	 */
+	while (dlimit - daddr)
+		*((uint8_t *)daddr++) = *((uint8_t *)saddr++);
+
+	/*
+	 * Finally, commit the reserved space in the destination buffer.
+	 */
+	dest->dtb_offset = offs + src->dtb_offset;
+
+out:
+	/*
+	 * If we're lucky enough to be the only active CPU on this speculation
+	 * buffer, we can just set the state back to DTRACESPEC_INACTIVE.
+	 */
+	if (current == DTRACESPEC_ACTIVE ||
+	    (current == DTRACESPEC_ACTIVEONE && new == DTRACESPEC_COMMITTING)) {
+		uint32_t rval = dtrace_cas32((uint32_t *)&spec->dtsp_state,
+		    DTRACESPEC_COMMITTING, DTRACESPEC_INACTIVE);
+
+		ASSERT(rval == DTRACESPEC_COMMITTING);
+	}
+
+	src->dtb_offset = 0;
+	src->dtb_xamot_drops += src->dtb_drops;
+	src->dtb_drops = 0;
+}
+
+/*
+ * This routine discards an active speculation.  If the specified speculation
+ * is not in a valid state to perform a discard(), this routine will silently
+ * do nothing.  The state of the specified speculation is transitioned
+ * according to the state transition diagram outlined in <sys/dtrace_impl.h>
+ */
+static void
+dtrace_speculation_discard(dtrace_state_t *state, processorid_t cpu,
+    dtrace_specid_t which)
+{
+	dtrace_speculation_t *spec;
+	dtrace_speculation_state_t current, new = 0;
+	dtrace_buffer_t *buf;
+
+	if (which == 0)
+		return;
+
+	if (which > state->dts_nspeculations) {
+		cpu_core[cpu].cpuc_dtrace_flags |= CPU_DTRACE_ILLOP;
+		return;
+	}
+
+	spec = &state->dts_speculations[which - 1];
+	buf = &spec->dtsp_buffer[cpu];
+
+	do {
+		current = spec->dtsp_state;
+
+		switch (current) {
+		case DTRACESPEC_INACTIVE:
+		case DTRACESPEC_COMMITTINGMANY:
+		case DTRACESPEC_COMMITTING:
+		case DTRACESPEC_DISCARDING:
+			return;
+
+		case DTRACESPEC_ACTIVE:
+		case DTRACESPEC_ACTIVEMANY:
+			new = DTRACESPEC_DISCARDING;
+			break;
+
+		case DTRACESPEC_ACTIVEONE:
+			if (buf->dtb_offset != 0) {
+				new = DTRACESPEC_INACTIVE;
+			} else {
+				new = DTRACESPEC_DISCARDING;
+			}
+			break;
+
+		default:
+			ASSERT(0);
+		}
+	} while (dtrace_cas32((uint32_t *)&spec->dtsp_state,
+	    current, new) != current);
+
+	buf->dtb_offset = 0;
+	buf->dtb_drops = 0;
+}
+
+/*
+ * Note:  not called from probe context.  This function is called
+ * asynchronously from cross call context to clean any speculations that are
+ * in the COMMITTINGMANY or DISCARDING states.  These speculations may not be
+ * transitioned back to the INACTIVE state until all CPUs have cleaned the
+ * speculation.
+ */
+static void
+dtrace_speculation_clean_here(dtrace_state_t *state)
+{
+	dtrace_icookie_t cookie;
+	processorid_t cpu = curcpu;
+	dtrace_buffer_t *dest = &state->dts_buffer[cpu];
+	dtrace_specid_t i;
+
+	cookie = dtrace_interrupt_disable();
+
+	if (dest->dtb_tomax == NULL) {
+		dtrace_interrupt_enable(cookie);
+		return;
+	}
+
+	for (i = 0; i < state->dts_nspeculations; i++) {
+		dtrace_speculation_t *spec = &state->dts_speculations[i];
+		dtrace_buffer_t *src = &spec->dtsp_buffer[cpu];
+
+		if (src->dtb_tomax == NULL)
+			continue;
+
+		if (spec->dtsp_state == DTRACESPEC_DISCARDING) {
+			src->dtb_offset = 0;
+			continue;
+		}
+
+		if (spec->dtsp_state != DTRACESPEC_COMMITTINGMANY)
+			continue;
+
+		if (src->dtb_offset == 0)
+			continue;
+
+		dtrace_speculation_commit(state, cpu, i + 1);
+	}
+
+	dtrace_interrupt_enable(cookie);
+}
+
+/*
+ * Note:  not called from probe context.  This function is called
+ * asynchronously (and at a regular interval) to clean any speculations that
+ * are in the COMMITTINGMANY or DISCARDING states.  If it discovers that there
+ * is work to be done, it cross calls all CPUs to perform that work;
+ * COMMITMANY and DISCARDING speculations may not be transitioned back to the
+ * INACTIVE state until they have been cleaned by all CPUs.
+ */
+static void
+dtrace_speculation_clean(dtrace_state_t *state)
+{
+	int work = 0, rv;
+	dtrace_specid_t i;
+
+	for (i = 0; i < state->dts_nspeculations; i++) {
+		dtrace_speculation_t *spec = &state->dts_speculations[i];
+
+		ASSERT(!spec->dtsp_cleaning);
+
+		if (spec->dtsp_state != DTRACESPEC_DISCARDING &&
+		    spec->dtsp_state != DTRACESPEC_COMMITTINGMANY)
+			continue;
+
+		work++;
+		spec->dtsp_cleaning = 1;
+	}
+
+	if (!work)
+		return;
+
+	dtrace_xcall(DTRACE_CPUALL,
+	    (dtrace_xcall_t)dtrace_speculation_clean_here, state);
+
+	/*
+	 * We now know that all CPUs have committed or discarded their
+	 * speculation buffers, as appropriate.  We can now set the state
+	 * to inactive.
+	 */
+	for (i = 0; i < state->dts_nspeculations; i++) {
+		dtrace_speculation_t *spec = &state->dts_speculations[i];
+		dtrace_speculation_state_t current, new;
+
+		if (!spec->dtsp_cleaning)
+			continue;
+
+		current = spec->dtsp_state;
+		ASSERT(current == DTRACESPEC_DISCARDING ||
+		    current == DTRACESPEC_COMMITTINGMANY);
+
+		new = DTRACESPEC_INACTIVE;
+
+		rv = dtrace_cas32((uint32_t *)&spec->dtsp_state, current, new);
+		ASSERT(rv == current);
+		spec->dtsp_cleaning = 0;
+	}
+}
+
+/*
+ * Called as part of a speculate() to get the speculative buffer associated
+ * with a given speculation.  Returns NULL if the specified speculation is not
+ * in an ACTIVE state.  If the speculation is in the ACTIVEONE state -- and
+ * the active CPU is not the specified CPU -- the speculation will be
+ * atomically transitioned into the ACTIVEMANY state.
+ */
+static dtrace_buffer_t *
+dtrace_speculation_buffer(dtrace_state_t *state, processorid_t cpuid,
+    dtrace_specid_t which)
+{
+	dtrace_speculation_t *spec;
+	dtrace_speculation_state_t current, new = 0;
+	dtrace_buffer_t *buf;
+
+	if (which == 0)
+		return (NULL);
+
+	if (which > state->dts_nspeculations) {
+		cpu_core[cpuid].cpuc_dtrace_flags |= CPU_DTRACE_ILLOP;
+		return (NULL);
+	}
+
+	spec = &state->dts_speculations[which - 1];
+	buf = &spec->dtsp_buffer[cpuid];
+
+	do {
+		current = spec->dtsp_state;
+
+		switch (current) {
+		case DTRACESPEC_INACTIVE:
+		case DTRACESPEC_COMMITTINGMANY:
+		case DTRACESPEC_DISCARDING:
+			return (NULL);
+
+		case DTRACESPEC_COMMITTING:
+			ASSERT(buf->dtb_offset == 0);
+			return (NULL);
+
+		case DTRACESPEC_ACTIVEONE:
+			/*
+			 * This speculation is currently active on one CPU.
+			 * Check the offset in the buffer; if it's non-zero,
+			 * that CPU must be us (and we leave the state alone).
+			 * If it's zero, assume that we're starting on a new
+			 * CPU -- and change the state to indicate that the
+			 * speculation is active on more than one CPU.
+			 */
+			if (buf->dtb_offset != 0)
+				return (buf);
+
+			new = DTRACESPEC_ACTIVEMANY;
+			break;
+
+		case DTRACESPEC_ACTIVEMANY:
+			return (buf);
+
+		case DTRACESPEC_ACTIVE:
+			new = DTRACESPEC_ACTIVEONE;
+			break;
+
+		default:
+			ASSERT(0);
+		}
+	} while (dtrace_cas32((uint32_t *)&spec->dtsp_state,
+	    current, new) != current);
+
+	ASSERT(new == DTRACESPEC_ACTIVEONE || new == DTRACESPEC_ACTIVEMANY);
+	return (buf);
+}
+
+/*
+ * Return a string.  In the event that the user lacks the privilege to access
+ * arbitrary kernel memory, we copy the string out to scratch memory so that we
+ * don't fail access checking.
+ *
+ * dtrace_dif_variable() uses this routine as a helper for various
+ * builtin values such as 'execname' and 'probefunc.'
+ */
+uintptr_t
+dtrace_dif_varstr(uintptr_t addr, dtrace_state_t *state,
+    dtrace_mstate_t *mstate)
+{
+	uint64_t size = state->dts_options[DTRACEOPT_STRSIZE];
+	uintptr_t ret;
+	size_t strsz;
+
+	/*
+	 * The easy case: this probe is allowed to read all of memory, so
+	 * we can just return this as a vanilla pointer.
+	 */
+	if ((mstate->dtms_access & DTRACE_ACCESS_KERNEL) != 0)
+		return (addr);
+
+	/*
+	 * This is the tougher case: we copy the string in question from
+	 * kernel memory into scratch memory and return it that way: this
+	 * ensures that we won't trip up when access checking tests the
+	 * BYREF return value.
+	 */
+	strsz = dtrace_strlen((char *)addr, size) + 1;
+
+	if (mstate->dtms_scratch_ptr + strsz >
+	    mstate->dtms_scratch_base + mstate->dtms_scratch_size) {
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+		return (0);
+	}
+
+	dtrace_strcpy((const void *)addr, (void *)mstate->dtms_scratch_ptr,
+	    strsz);
+	ret = mstate->dtms_scratch_ptr;
+	mstate->dtms_scratch_ptr += strsz;
+	return (ret);
+}
+
+/*
+ * Return a string from a memoy address which is known to have one or
+ * more concatenated, individually zero terminated, sub-strings.
+ * In the event that the user lacks the privilege to access
+ * arbitrary kernel memory, we copy the string out to scratch memory so that we
+ * don't fail access checking.
+ *
+ * dtrace_dif_variable() uses this routine as a helper for various
+ * builtin values such as 'execargs'.
+ */
+static uintptr_t
+dtrace_dif_varstrz(uintptr_t addr, size_t strsz, dtrace_state_t *state,
+    dtrace_mstate_t *mstate)
+{
+	char *p;
+	size_t i;
+	uintptr_t ret;
+
+	if (mstate->dtms_scratch_ptr + strsz >
+	    mstate->dtms_scratch_base + mstate->dtms_scratch_size) {
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_NOSCRATCH);
+		return (0);
+	}
+
+	dtrace_bcopy((const void *)addr, (void *)mstate->dtms_scratch_ptr,
+	    strsz);
+
+	/* Replace sub-string termination characters with a space. */
+	for (p = (char *) mstate->dtms_scratch_ptr, i = 0; i < strsz - 1;
+	    p++, i++)
+		if (*p == '\0')
+			*p = ' ';
+
+	ret = mstate->dtms_scratch_ptr;
+	mstate->dtms_scratch_ptr += strsz;
+	return (ret);
+}
+
+/*
+ * This function implements the DIF emulator's variable lookups.  The emulator
+ * passes a reserved variable identifier and optional built-in array index.
+ */
+static uint64_t
+dtrace_dif_variable(dtrace_mstate_t *mstate, dtrace_state_t *state, uint64_t v,
+    uint64_t ndx)
+{
+	/*
+	 * If we're accessing one of the uncached arguments, we'll turn this
+	 * into a reference in the args array.
+	 */
+	if (v >= DIF_VAR_ARG0 && v <= DIF_VAR_ARG9) {
+		ndx = v - DIF_VAR_ARG0;
+		v = DIF_VAR_ARGS;
+	}
+
+	switch (v) {
+	case DIF_VAR_ARGS:
+		ASSERT(mstate->dtms_present & DTRACE_MSTATE_ARGS);
+		if (ndx >= sizeof (mstate->dtms_arg) /
+		    sizeof (mstate->dtms_arg[0])) {
+			int aframes = mstate->dtms_probe->dtpr_aframes + 2;
+			dtrace_provider_t *pv;
+			uint64_t val;
+
+			pv = mstate->dtms_probe->dtpr_provider;
+			if (pv->dtpv_pops.dtps_getargval != NULL)
+				val = pv->dtpv_pops.dtps_getargval(pv->dtpv_arg,
+				    mstate->dtms_probe->dtpr_id,
+				    mstate->dtms_probe->dtpr_arg, ndx, aframes);
+			else
+				val = dtrace_getarg(ndx, aframes);
+
+			/*
+			 * This is regrettably required to keep the compiler
+			 * from tail-optimizing the call to dtrace_getarg().
+			 * The condition always evaluates to true, but the
+			 * compiler has no way of figuring that out a priori.
+			 * (None of this would be necessary if the compiler
+			 * could be relied upon to _always_ tail-optimize
+			 * the call to dtrace_getarg() -- but it can't.)
+			 */
+			if (mstate->dtms_probe != NULL)
+				return (val);
+
+			ASSERT(0);
+		}
+
+		return (mstate->dtms_arg[ndx]);
+
+#ifdef illumos
+	case DIF_VAR_UREGS: {
+		klwp_t *lwp;
+
+		if (!dtrace_priv_proc(state))
+			return (0);
+
+		if ((lwp = curthread->t_lwp) == NULL) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_BADADDR);
+			cpu_core[curcpu].cpuc_dtrace_illval = NULL;
+			return (0);
+		}
+
+		return (dtrace_getreg(lwp->lwp_regs, ndx));
+		return (0);
+	}
+#else
+	case DIF_VAR_UREGS: {
+		struct trapframe *tframe;
+
+		if (!dtrace_priv_proc(state))
+			return (0);
+
+		if ((tframe = curthread->td_frame) == NULL) {
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_BADADDR);
+			cpu_core[curcpu].cpuc_dtrace_illval = 0;
+			return (0);
+		}
+
+		return (dtrace_getreg(tframe, ndx));
+	}
+#endif
+
+	case DIF_VAR_CURTHREAD:
+		if (!dtrace_priv_proc(state))
+			return (0);
+		return ((uint64_t)(uintptr_t)curthread);
+
+	case DIF_VAR_TIMESTAMP:
+		if (!(mstate->dtms_present & DTRACE_MSTATE_TIMESTAMP)) {
+			mstate->dtms_timestamp = dtrace_gethrtime();
+			mstate->dtms_present |= DTRACE_MSTATE_TIMESTAMP;
+		}
+		return (mstate->dtms_timestamp);
+
+	case DIF_VAR_VTIMESTAMP:
+		ASSERT(dtrace_vtime_references != 0);
+		return (curthread->t_dtrace_vtime);
+
+	case DIF_VAR_WALLTIMESTAMP:
+		if (!(mstate->dtms_present & DTRACE_MSTATE_WALLTIMESTAMP)) {
+			mstate->dtms_walltimestamp = dtrace_gethrestime();
+			mstate->dtms_present |= DTRACE_MSTATE_WALLTIMESTAMP;
+		}
+		return (mstate->dtms_walltimestamp);
+
+#ifdef illumos
+	case DIF_VAR_IPL:
+		if (!dtrace_priv_kernel(state))
+			return (0);
+		if (!(mstate->dtms_present & DTRACE_MSTATE_IPL)) {
+			mstate->dtms_ipl = dtrace_getipl();
+			mstate->dtms_present |= DTRACE_MSTATE_IPL;
+		}
+		return (mstate->dtms_ipl);
+#endif
+
+	case DIF_VAR_EPID:
+		ASSERT(mstate->dtms_present & DTRACE_MSTATE_EPID);
+		return (mstate->dtms_epid);
+
+	case DIF_VAR_ID:
+		ASSERT(mstate->dtms_present & DTRACE_MSTATE_PROBE);
+		return (mstate->dtms_probe->dtpr_id);
+
+	case DIF_VAR_STACKDEPTH:
+		if (!dtrace_priv_kernel(state))
+			return (0);
+		if (!(mstate->dtms_present & DTRACE_MSTATE_STACKDEPTH)) {
+			int aframes = mstate->dtms_probe->dtpr_aframes + 2;
+
+			mstate->dtms_stackdepth = dtrace_getstackdepth(aframes);
+			mstate->dtms_present |= DTRACE_MSTATE_STACKDEPTH;
+		}
+		return (mstate->dtms_stackdepth);
+
+	case DIF_VAR_USTACKDEPTH:
+		if (!dtrace_priv_proc(state))
+			return (0);
+		if (!(mstate->dtms_present & DTRACE_MSTATE_USTACKDEPTH)) {
+			/*
+			 * See comment in DIF_VAR_PID.
+			 */
+			if (DTRACE_ANCHORED(mstate->dtms_probe) &&
+			    CPU_ON_INTR(CPU)) {
+				mstate->dtms_ustackdepth = 0;
+			} else {
+				DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+				mstate->dtms_ustackdepth =
+				    dtrace_getustackdepth();
+				DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+			}
+			mstate->dtms_present |= DTRACE_MSTATE_USTACKDEPTH;
+		}
+		return (mstate->dtms_ustackdepth);
+
+	case DIF_VAR_CALLER:
+		if (!dtrace_priv_kernel(state))
+			return (0);
+		if (!(mstate->dtms_present & DTRACE_MSTATE_CALLER)) {
+			int aframes = mstate->dtms_probe->dtpr_aframes + 2;
+
+			if (!DTRACE_ANCHORED(mstate->dtms_probe)) {
+				/*
+				 * If this is an unanchored probe, we are
+				 * required to go through the slow path:
+				 * dtrace_caller() only guarantees correct
+				 * results for anchored probes.
+				 */
+				pc_t caller[2] = {0, 0};
+
+				dtrace_getpcstack(caller, 2, aframes,
+				    (uint32_t *)(uintptr_t)mstate->dtms_arg[0]);
+				mstate->dtms_caller = caller[1];
+			} else if ((mstate->dtms_caller =
+			    dtrace_caller(aframes)) == -1) {
+				/*
+				 * We have failed to do this the quick way;
+				 * we must resort to the slower approach of
+				 * calling dtrace_getpcstack().
+				 */
+				pc_t caller = 0;
+
+				dtrace_getpcstack(&caller, 1, aframes, NULL);
+				mstate->dtms_caller = caller;
+			}
+
+			mstate->dtms_present |= DTRACE_MSTATE_CALLER;
+		}
+		return (mstate->dtms_caller);
+
+	case DIF_VAR_UCALLER:
+		if (!dtrace_priv_proc(state))
+			return (0);
+
+		if (!(mstate->dtms_present & DTRACE_MSTATE_UCALLER)) {
+			uint64_t ustack[3];
+
+			/*
+			 * dtrace_getupcstack() fills in the first uint64_t
+			 * with the current PID.  The second uint64_t will
+			 * be the program counter at user-level.  The third
+			 * uint64_t will contain the caller, which is what
+			 * we're after.
+			 */
+			ustack[2] = 0;
+			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
+			dtrace_getupcstack(ustack, 3);
+			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
+			mstate->dtms_ucaller = ustack[2];
+			mstate->dtms_present |= DTRACE_MSTATE_UCALLER;
+		}
+
+		return (mstate->dtms_ucaller);
+
+	case DIF_VAR_PROBEPROV:
+		ASSERT(mstate->dtms_present & DTRACE_MSTATE_PROBE);
+		return (dtrace_dif_varstr(
+		    (uintptr_t)mstate->dtms_probe->dtpr_provider->dtpv_name,
+		    state, mstate));
+
+	case DIF_VAR_PROBEMOD:
+		ASSERT(mstate->dtms_present & DTRACE_MSTATE_PROBE);
+		return (dtrace_dif_varstr(
+		    (uintptr_t)mstate->dtms_probe->dtpr_mod,
+		    state, mstate));
+
+	case DIF_VAR_PROBEFUNC:
+		ASSERT(mstate->dtms_present & DTRACE_MSTATE_PROBE);
+		return (dtrace_dif_varstr(
+		    (uintptr_t)mstate->dtms_probe->dtpr_func,
+		    state, mstate));
+
+	case DIF_VAR_PROBENAME:
+		ASSERT(mstate->dtms_present & DTRACE_MSTATE_PROBE);
+		return (dtrace_dif_varstr(
+		    (uintptr_t)mstate->dtms_probe->dtpr_name,
+		    state, mstate));
+
+	case DIF_VAR_PID:
+		if (!dtrace_priv_proc(state))
+			return (0);
+
+#ifdef illumos
+		/*
+		 * Note that we are assuming that an unanchored probe is
+		 * always due to a high-level interrupt.  (And we're assuming
+		 * that there is only a single high level interrupt.)
+		 */
+		if (DTRACE_ANCHORED(mstate->dtms_probe) && CPU_ON_INTR(CPU))
+			return (pid0.pid_id);
+
+		/*
+		 * It is always safe to dereference one's own t_procp pointer:
+		 * it always points to a valid, allocated proc structure.
+		 * Further, it is always safe to dereference the p_pidp member
+		 * of one's own proc structure.  (These are truisms becuase
+		 * threads and processes don't clean up their own state --
+		 * they leave that task to whomever reaps them.)
+		 */
+		return ((uint64_t)curthread->t_procp->p_pidp->pid_id);
+#else
+		return ((uint64_t)curproc->p_pid);
+#endif
+
+	case DIF_VAR_PPID:
+		if (!dtrace_priv_proc(state))
+			return (0);
+
+#ifdef illumos
+		/*
+		 * See comment in DIF_VAR_PID.
+		 */
+		if (DTRACE_ANCHORED(mstate->dtms_probe) && CPU_ON_INTR(CPU))
+			return (pid0.pid_id);
+
+		/*
+		 * It is always safe to dereference one's own t_procp pointer:
+		 * it always points to a valid, allocated proc structure.
+		 * (This is true because threads don't clean up their own
+		 * state -- they leave that task to whomever reaps them.)
+		 */
+		return ((uint64_t)curthread->t_procp->p_ppid);
+#else
+		if (curproc->p_pid == proc0.p_pid)
+			return (curproc->p_pid);
+		else
+			return (curproc->p_pptr->p_pid);
+#endif
+
+	case DIF_VAR_TID:
+#ifdef illumos
+		/*
+		 * See comment in DIF_VAR_PID.
+		 */
+		if (DTRACE_ANCHORED(mstate->dtms_probe) && CPU_ON_INTR(CPU))
+			return (0);
+#endif
+
+		return ((uint64_t)curthread->t_tid);
+
+	case DIF_VAR_EXECARGS: {
+		struct pargs *p_args = curthread->td_proc->p_args;
+
+		if (p_args == NULL)
+			return(0);
+
+		return (dtrace_dif_varstrz(
+		    (uintptr_t) p_args->ar_args, p_args->ar_length, state, mstate));
+	}
+
+	case DIF_VAR_EXECNAME:
+#ifdef illumos
+		if (!dtrace_priv_proc(state))
+			return (0);
+
+		/*
+		 * See comment in DIF_VAR_PID.
+		 */
+		if (DTRACE_ANCHORED(mstate->dtms_probe) && CPU_ON_INTR(CPU))
+			return ((uint64_t)(uintptr_t)p0.p_user.u_comm);
+
+		/*
+		 * It is always safe to dereference one's own t_procp pointer:
+		 * it always points to a valid, allocated proc structure.
+		 * (This is true because threads don't clean up their own
+		 * state -- they leave that task to whomever reaps them.)
+		 */
+		return (dtrace_dif_varstr(
+		    (uintptr_t)curthread->t_procp->p_user.u_comm,
+		    state, mstate));
+#else
+		return (dtrace_dif_varstr(
+		    (uintptr_t) curthread->td_proc->p_comm, state, mstate));
+#endif
+
+	case DIF_VAR_ZONENAME:
+#ifdef illumos
+		if (!dtrace_priv_proc(state))
+			return (0);
+
+		/*
+		 * See comment in DIF_VAR_PID.
+		 */
+		if (DTRACE_ANCHORED(mstate->dtms_probe) && CPU_ON_INTR(CPU))
+			return ((uint64_t)(uintptr_t)p0.p_zone->zone_name);
+
+		/*
+		 * It is always safe to dereference one's own t_procp pointer:
+		 * it always points to a valid, allocated proc structure.
+		 * (This is true because threads don't clean up their own
+		 * state -- they leave that task to whomever reaps them.)
+		 */
+		return (dtrace_dif_varstr(
+		    (uintptr_t)curthread->t_procp->p_zone->zone_name,
+		    state, mstate));
+#else
+		return (0);
+#endif
+
+	case DIF_VAR_UID:
+		if (!dtrace_priv_proc(state))
+			return (0);
+
+#ifdef illumos
+		/*
+		 * See comment in DIF_VAR_PID.
+		 */
+		if (DTRACE_ANCHORED(mstate->dtms_probe) && CPU_ON_INTR(CPU))
+			return ((uint64_t)p0.p_cred->cr_uid);
+
+		/*
+		 * It is always safe to dereference one's own t_procp pointer:
+		 * it always points to a valid, allocated proc structure.
+		 * (This is true because threads don't clean up their own
+		 * state -- they leave that task to whomever reaps them.)
+		 *
+		 * Additionally, it is safe to dereference one's own process
+		 * credential, since this is never NULL after process birth.
+		 */
+		return ((uint64_t)curthread->t_procp->p_cred->cr_uid);
+#else
+		return ((uint64_t)curthread->td_ucred->cr_uid);
+#endif
+
+	case DIF_VAR_GID:
+		if (!dtrace_priv_proc(state))
+			return (0);
+
+#ifdef illumos
+		/*
+		 * See comment in DIF_VAR_PID.
+		 */
+		if (DTRACE_ANCHORED(mstate->dtms_probe) && CPU_ON_INTR(CPU))
+			return ((uint64_t)p0.p_cred->cr_gid);
+
+		/*
+		 * It is always safe to dereference one's own t_procp pointer:
+		 * it always points to a valid, allocated proc structure.
+		 * (This is true because threads don't clean up their own
+		 * state -- they leave that task to whomever reaps them.)
+		 *
+		 * Additionally, it is safe to dereference one's own process
+		 * credential, since this is never NULL after process birth.
+		 */
+		return ((uint64_t)curthread->t_procp->p_cred->cr_gid);
+#else
+		return ((uint64_t)curthread->td_ucred->cr_gid);
+#endif
+
+	case DIF_VAR_ERRNO: {
+#ifdef illumos
+		klwp_t *lwp;
+		if (!dtrace_priv_proc(state))
+			return (0);
+
+		/*
+		 * See comment in DIF_VAR_PID.
+		 */
+		if (DTRACE_ANCHORED(mstate->dtms_probe) && CPU_ON_INTR(CPU))
+			return (0);
+
+		/*
+		 * It is always safe to dereference one's own t_lwp pointer in
+		 * the event that this pointer is non-NULL.  (This is true
+		 * because threads and lwps don't clean up their own state --
+		 * they leave that task to whomever reaps them.)
+		 */
+		if ((lwp = curthread->t_lwp) == NULL)
+			return (0);
+
+		return ((uint64_t)lwp->lwp_errno);
+#else
+		return (curthread->td_errno);
+#endif
+	}
+#ifndef illumos
+	case DIF_VAR_CPU: {
+		return curcpu;
+	}
+#endif
+	default:
+		DTRACE_CPUFLAG_SET(CPU_DTRACE_ILLOP);
+		return (0);
+	}
+}
+
 
 /*
  * If you're looking for the epicenter of DTrace, you just found it.  This
