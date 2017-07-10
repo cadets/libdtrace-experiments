@@ -3090,6 +3090,875 @@ dtrace_multiply_128(uint64_t factor1, uint64_t factor2, uint64_t *product)
 	dtrace_add_128(product, tmp, product);
 }
 
+/*
+ * This privilege check should be used by actions and subroutines to
+ * verify that the user credentials of the process that enabled the
+ * invoking ECB match the target credentials
+ */
+static int
+dtrace_priv_proc_common_user(dtrace_state_t *state)
+{
+	/*
+	 * FIXME: We have cred for everything
+	 */
+	return (1);
+#if 0
+	cred_t *cr, *s_cr = state->dts_cred.dcr_cred;
+
+	/*
+	 * We should always have a non-NULL state cred here, since if cred
+	 * is null (anonymous tracing), we fast-path bypass this routine.
+	 */
+	assert(s_cr != NULL);
+
+	if ((cr = CRED()) != NULL &&
+	    s_cr->cr_uid == cr->cr_uid &&
+	    s_cr->cr_uid == cr->cr_ruid &&
+	    s_cr->cr_uid == cr->cr_suid &&
+	    s_cr->cr_gid == cr->cr_gid &&
+	    s_cr->cr_gid == cr->cr_rgid &&
+	    s_cr->cr_gid == cr->cr_sgid)
+		return (1);
+
+	return (0);
+#endif
+}
+
+/*
+ * This privilege check should be used by actions and subroutines to
+ * verify that the zone of the process that enabled the invoking ECB
+ * matches the target credentials
+ */
+static int
+dtrace_priv_proc_common_zone(dtrace_state_t *state)
+{
+#ifdef illumos
+	cred_t *cr, *s_cr = state->dts_cred.dcr_cred;
+
+	/*
+	 * We should always have a non-NULL state cred here, since if cred
+	 * is null (anonymous tracing), we fast-path bypass this routine.
+	 */
+	ASSERT(s_cr != NULL);
+
+	if ((cr = CRED()) != NULL && s_cr->cr_zone == cr->cr_zone)
+		return (1);
+
+	return (0);
+#else
+	return (1);
+#endif
+}
+
+/*
+ * This privilege check should be used by actions and subroutines to
+ * verify that the process has not setuid or changed credentials.
+ */
+static int
+dtrace_priv_proc_common_nocd(void)
+{
+	proc_t *proc;
+
+	if ((proc = ttoproc(curthread)) != NULL &&
+	    !(proc->p_flag & SNOCD))
+		return (1);
+
+	return (0);
+}
+
+static int
+dtrace_priv_proc_destructive(dtrace_state_t *state)
+{
+	int action = state->dts_cred.dcr_action;
+
+	if (((action & DTRACE_CRA_PROC_DESTRUCTIVE_ALLZONE) == 0) &&
+	    dtrace_priv_proc_common_zone(state) == 0)
+		goto bad;
+
+	if (((action & DTRACE_CRA_PROC_DESTRUCTIVE_ALLUSER) == 0) &&
+	    dtrace_priv_proc_common_user(state) == 0)
+		goto bad;
+
+	if (((action & DTRACE_CRA_PROC_DESTRUCTIVE_CREDCHG) == 0) &&
+	    dtrace_priv_proc_common_nocd() == 0)
+		goto bad;
+
+	return (1);
+
+bad:
+	cpuc_dtrace_flags |= CPU_DTRACE_UPRIV;
+
+	return (0);
+}
+
+static int
+dtrace_priv_proc_control(dtrace_state_t *state)
+{
+	if (state->dts_cred.dcr_action & DTRACE_CRA_PROC_CONTROL)
+		return (1);
+
+	if (dtrace_priv_proc_common_zone(state) &&
+	    dtrace_priv_proc_common_user(state) &&
+	    dtrace_priv_proc_common_nocd())
+		return (1);
+
+	cpuc_dtrace_flags |= CPU_DTRACE_UPRIV;
+
+	return (0);
+}
+
+static int
+dtrace_priv_proc(dtrace_state_t *state)
+{
+	if (state->dts_cred.dcr_action & DTRACE_CRA_PROC)
+		return (1);
+
+	cpuc_dtrace_flags |= CPU_DTRACE_UPRIV;
+
+	return (0);
+}
+
+static int
+dtrace_priv_kernel(dtrace_state_t *state)
+{
+	if (state->dts_cred.dcr_action & DTRACE_CRA_KERNEL)
+		return (1);
+
+	cpuc_dtrace_flags |= CPU_DTRACE_KPRIV;
+
+	return (0);
+}
+
+static int
+dtrace_priv_kernel_destructive(dtrace_state_t *state)
+{
+	if (state->dts_cred.dcr_action & DTRACE_CRA_KERNEL_DESTRUCTIVE)
+		return (1);
+
+	cpuc_dtrace_flags |= CPU_DTRACE_KPRIV;
+
+	return (0);
+}
+
+/*
+ * Determine if the dte_cond of the specified ECB allows for processing of
+ * the current probe to continue.  Note that this routine may allow continued
+ * processing, but with access(es) stripped from the mstate's dtms_access
+ * field.
+ */
+static int
+dtrace_priv_probe(dtrace_state_t *state, dtrace_mstate_t *mstate,
+    dtrace_ecb_t *ecb)
+{
+	dtrace_probe_t *probe = ecb->dte_probe;
+	dtrace_provider_t *prov = probe->dtpr_provider;
+	dtrace_pops_t *pops = &prov->dtpv_pops;
+	int mode = DTRACE_MODE_NOPRIV_DROP;
+
+	ASSERT(ecb->dte_cond);
+
+#ifdef illumos
+	if (pops->dtps_mode != NULL) {
+		mode = pops->dtps_mode(prov->dtpv_arg,
+		    probe->dtpr_id, probe->dtpr_arg);
+
+		ASSERT((mode & DTRACE_MODE_USER) ||
+		    (mode & DTRACE_MODE_KERNEL));
+		ASSERT((mode & DTRACE_MODE_NOPRIV_RESTRICT) ||
+		    (mode & DTRACE_MODE_NOPRIV_DROP));
+	}
+
+	/*
+	 * If the dte_cond bits indicate that this consumer is only allowed to
+	 * see user-mode firings of this probe, call the provider's dtps_mode()
+	 * entry point to check that the probe was fired while in a user
+	 * context.  If that's not the case, use the policy specified by the
+	 * provider to determine if we drop the probe or merely restrict
+	 * operation.
+	 */
+	if (ecb->dte_cond & DTRACE_COND_USERMODE) {
+		ASSERT(mode != DTRACE_MODE_NOPRIV_DROP);
+
+		if (!(mode & DTRACE_MODE_USER)) {
+			if (mode & DTRACE_MODE_NOPRIV_DROP)
+				return (0);
+
+			mstate->dtms_access &= ~DTRACE_ACCESS_ARGS;
+		}
+	}
+#endif
+
+	/*
+	 * FIXME: We don't care about this *right now*, but we do generally.
+	 */
+#if 0
+	/*
+	 * This is more subtle than it looks. We have to be absolutely certain
+	 * that CRED() isn't going to change out from under us so it's only
+	 * legit to examine that structure if we're in constrained situations.
+	 * Currently, the only times we'll this check is if a non-super-user
+	 * has enabled the profile or syscall providers -- providers that
+	 * allow visibility of all processes. For the profile case, the check
+	 * above will ensure that we're examining a user context.
+	 */
+	if (ecb->dte_cond & DTRACE_COND_OWNER) {
+		cred_t *cr;
+		cred_t *s_cr = state->dts_cred.dcr_cred;
+		proc_t *proc;
+
+		ASSERT(s_cr != NULL);
+
+		if ((cr = CRED()) == NULL ||
+		    s_cr->cr_uid != cr->cr_uid ||
+		    s_cr->cr_uid != cr->cr_ruid ||
+		    s_cr->cr_uid != cr->cr_suid ||
+		    s_cr->cr_gid != cr->cr_gid ||
+		    s_cr->cr_gid != cr->cr_rgid ||
+		    s_cr->cr_gid != cr->cr_sgid ||
+		    (proc = ttoproc(curthread)) == NULL ||
+		    (proc->p_flag & SNOCD)) {
+			if (mode & DTRACE_MODE_NOPRIV_DROP)
+				return (0);
+
+#ifdef illumos
+			mstate->dtms_access &= ~DTRACE_ACCESS_PROC;
+#endif
+		}
+	}
+#endif
+
+#ifdef illumos
+	/*
+	 * If our dte_cond is set to DTRACE_COND_ZONEOWNER and we are not
+	 * in our zone, check to see if our mode policy is to restrict rather
+	 * than to drop; if to restrict, strip away both DTRACE_ACCESS_PROC
+	 * and DTRACE_ACCESS_ARGS
+	 */
+	if (ecb->dte_cond & DTRACE_COND_ZONEOWNER) {
+		cred_t *cr;
+		cred_t *s_cr = state->dts_cred.dcr_cred;
+
+		ASSERT(s_cr != NULL);
+
+		if ((cr = CRED()) == NULL ||
+		    s_cr->cr_zone->zone_id != cr->cr_zone->zone_id) {
+			if (mode & DTRACE_MODE_NOPRIV_DROP)
+				return (0);
+
+			mstate->dtms_access &=
+			    ~(DTRACE_ACCESS_PROC | DTRACE_ACCESS_ARGS);
+		}
+	}
+#endif
+
+	return (1);
+}
+
+/*
+ * Note:  not called from probe context.  This function is called
+ * asynchronously (and at a regular interval) from outside of probe context to
+ * clean the dirty dynamic variable lists on all CPUs.  Dynamic variable
+ * cleaning is explained in detail in <sys/dtrace_impl.h>.
+ */
+void
+dtrace_dynvar_clean(dtrace_dstate_t *dstate)
+{
+	dtrace_dynvar_t *dirty;
+	dtrace_dstate_percpu_t *dcpu;
+	dtrace_dynvar_t **rinsep;
+	int i, j, work = 0;
+
+	for (i = 0; i < NCPU; i++) {
+		dcpu = &dstate->dtds_percpu[i];
+		rinsep = &dcpu->dtdsc_rinsing;
+
+		/*
+		 * If the dirty list is NULL, there is no dirty work to do.
+		 */
+		if (dcpu->dtdsc_dirty == NULL)
+			continue;
+
+		if (dcpu->dtdsc_rinsing != NULL) {
+			/*
+			 * If the rinsing list is non-NULL, then it is because
+			 * this CPU was selected to accept another CPU's
+			 * dirty list -- and since that time, dirty buffers
+			 * have accumulated.  This is a highly unlikely
+			 * condition, but we choose to ignore the dirty
+			 * buffers -- they'll be picked up a future cleanse.
+			 */
+			continue;
+		}
+
+		if (dcpu->dtdsc_clean != NULL) {
+			/*
+			 * If the clean list is non-NULL, then we're in a
+			 * situation where a CPU has done deallocations (we
+			 * have a non-NULL dirty list) but no allocations (we
+			 * also have a non-NULL clean list).  We can't simply
+			 * move the dirty list into the clean list on this
+			 * CPU, yet we also don't want to allow this condition
+			 * to persist, lest a short clean list prevent a
+			 * massive dirty list from being cleaned (which in
+			 * turn could lead to otherwise avoidable dynamic
+			 * drops).  To deal with this, we look for some CPU
+			 * with a NULL clean list, NULL dirty list, and NULL
+			 * rinsing list -- and then we borrow this CPU to
+			 * rinse our dirty list.
+			 */
+			for (j = 0; j < NCPU; j++) {
+				dtrace_dstate_percpu_t *rinser;
+
+				rinser = &dstate->dtds_percpu[j];
+
+				if (rinser->dtdsc_rinsing != NULL)
+					continue;
+
+				if (rinser->dtdsc_dirty != NULL)
+					continue;
+
+				if (rinser->dtdsc_clean != NULL)
+					continue;
+
+				rinsep = &rinser->dtdsc_rinsing;
+				break;
+			}
+
+			if (j == NCPU) {
+				/*
+				 * We were unable to find another CPU that
+				 * could accept this dirty list -- we are
+				 * therefore unable to clean it now.
+				 */
+				dtrace_dynvar_failclean++;
+				continue;
+			}
+		}
+
+		work = 1;
+
+		/*
+		 * Atomically move the dirty list aside.
+		 */
+		do {
+			dirty = dcpu->dtdsc_dirty;
+
+			/*
+			 * Before we zap the dirty list, set the rinsing list.
+			 * (This allows for a potential assertion in
+			 * dtrace_dynvar():  if a free dynamic variable appears
+			 * on a hash chain, either the dirty list or the
+			 * rinsing list for some CPU must be non-NULL.)
+			 */
+			*rinsep = dirty;
+			dtrace_membar_producer();
+		} while (dtrace_casptr(&dcpu->dtdsc_dirty,
+		    dirty, NULL) != dirty);
+	}
+
+	if (!work) {
+		/*
+		 * We have no work to do; we can simply return.
+		 */
+		return;
+	}
+
+	dtrace_sync();
+
+	for (i = 0; i < NCPU; i++) {
+		dcpu = &dstate->dtds_percpu[i];
+
+		if (dcpu->dtdsc_rinsing == NULL)
+			continue;
+
+		/*
+		 * We are now guaranteed that no hash chain contains a pointer
+		 * into this dirty list; we can make it clean.
+		 */
+		ASSERT(dcpu->dtdsc_clean == NULL);
+		dcpu->dtdsc_clean = dcpu->dtdsc_rinsing;
+		dcpu->dtdsc_rinsing = NULL;
+	}
+
+	/*
+	 * Before we actually set the state to be DTRACE_DSTATE_CLEAN, make
+	 * sure that all CPUs have seen all of the dtdsc_clean pointers.
+	 * This prevents a race whereby a CPU incorrectly decides that
+	 * the state should be something other than DTRACE_DSTATE_CLEAN
+	 * after dtrace_dynvar_clean() has completed.
+	 */
+	dtrace_sync();
+
+	dstate->dtds_state = DTRACE_DSTATE_CLEAN;
+}
+
+/*
+ * Depending on the value of the op parameter, this function looks-up,
+ * allocates or deallocates an arbitrarily-keyed dynamic variable.  If an
+ * allocation is requested, this function will return a pointer to a
+ * dtrace_dynvar_t corresponding to the allocated variable -- or NULL if no
+ * variable can be allocated.  If NULL is returned, the appropriate counter
+ * will be incremented.
+ */
+dtrace_dynvar_t *
+dtrace_dynvar(dtrace_dstate_t *dstate, uint_t nkeys,
+    dtrace_key_t *key, size_t dsize, dtrace_dynvar_op_t op,
+    dtrace_mstate_t *mstate, dtrace_vstate_t *vstate)
+{
+	uint64_t hashval = DTRACE_DYNHASH_VALID;
+	dtrace_dynhash_t *hash = dstate->dtds_hash;
+	dtrace_dynvar_t *free, *new_free, *next, *dvar, *start, *prev = NULL;
+	processorid_t me = curcpu, cpu = me;
+	dtrace_dstate_percpu_t *dcpu = &dstate->dtds_percpu[me];
+	size_t bucket, ksize;
+	size_t chunksize = dstate->dtds_chunksize;
+	uintptr_t kdata, lock, nstate;
+	uint_t i;
+
+	ASSERT(nkeys != 0);
+
+	/*
+	 * Hash the key.  As with aggregations, we use Jenkins' "One-at-a-time"
+	 * algorithm.  For the by-value portions, we perform the algorithm in
+	 * 16-bit chunks (as opposed to 8-bit chunks).  This speeds things up a
+	 * bit, and seems to have only a minute effect on distribution.  For
+	 * the by-reference data, we perform "One-at-a-time" iterating (safely)
+	 * over each referenced byte.  It's painful to do this, but it's much
+	 * better than pathological hash distribution.  The efficacy of the
+	 * hashing algorithm (and a comparison with other algorithms) may be
+	 * found by running the ::dtrace_dynstat MDB dcmd.
+	 */
+	for (i = 0; i < nkeys; i++) {
+		if (key[i].dttk_size == 0) {
+			uint64_t val = key[i].dttk_value;
+
+			hashval += (val >> 48) & 0xffff;
+			hashval += (hashval << 10);
+			hashval ^= (hashval >> 6);
+
+			hashval += (val >> 32) & 0xffff;
+			hashval += (hashval << 10);
+			hashval ^= (hashval >> 6);
+
+			hashval += (val >> 16) & 0xffff;
+			hashval += (hashval << 10);
+			hashval ^= (hashval >> 6);
+
+			hashval += val & 0xffff;
+			hashval += (hashval << 10);
+			hashval ^= (hashval >> 6);
+		} else {
+			/*
+			 * This is incredibly painful, but it beats the hell
+			 * out of the alternative.
+			 */
+			uint64_t j, size = key[i].dttk_size;
+			uintptr_t base = (uintptr_t)key[i].dttk_value;
+
+			if (!dtrace_canload(base, size, mstate, vstate))
+				break;
+
+			for (j = 0; j < size; j++) {
+				hashval += dtrace_load8(base + j);
+				hashval += (hashval << 10);
+				hashval ^= (hashval >> 6);
+			}
+		}
+	}
+
+	if (DTRACE_CPUFLAG_ISSET(CPU_DTRACE_FAULT))
+		return (NULL);
+
+	hashval += (hashval << 3);
+	hashval ^= (hashval >> 11);
+	hashval += (hashval << 15);
+
+	/*
+	 * There is a remote chance (ideally, 1 in 2^31) that our hashval
+	 * comes out to be one of our two sentinel hash values.  If this
+	 * actually happens, we set the hashval to be a value known to be a
+	 * non-sentinel value.
+	 */
+	if (hashval == DTRACE_DYNHASH_FREE || hashval == DTRACE_DYNHASH_SINK)
+		hashval = DTRACE_DYNHASH_VALID;
+
+	/*
+	 * Yes, it's painful to do a divide here.  If the cycle count becomes
+	 * important here, tricks can be pulled to reduce it.  (However, it's
+	 * critical that hash collisions be kept to an absolute minimum;
+	 * they're much more painful than a divide.)  It's better to have a
+	 * solution that generates few collisions and still keeps things
+	 * relatively simple.
+	 */
+	bucket = hashval % dstate->dtds_hashsize;
+
+	if (op == DTRACE_DYNVAR_DEALLOC) {
+		volatile uintptr_t *lockp = &hash[bucket].dtdh_lock;
+
+		for (;;) {
+			while ((lock = *lockp) & 1)
+				continue;
+
+			if (dtrace_casptr((volatile void *)lockp,
+			    (volatile void *)lock, (volatile void *)(lock + 1)) == (void *)lock)
+				break;
+		}
+
+		dtrace_membar_producer();
+	}
+
+top:
+	prev = NULL;
+	lock = hash[bucket].dtdh_lock;
+
+	dtrace_membar_consumer();
+
+	start = hash[bucket].dtdh_chain;
+	ASSERT(start != NULL && (start->dtdv_hashval == DTRACE_DYNHASH_SINK ||
+	    start->dtdv_hashval != DTRACE_DYNHASH_FREE ||
+	    op != DTRACE_DYNVAR_DEALLOC));
+
+	for (dvar = start; dvar != NULL; dvar = dvar->dtdv_next) {
+		dtrace_tuple_t *dtuple = &dvar->dtdv_tuple;
+		dtrace_key_t *dkey = &dtuple->dtt_key[0];
+
+		if (dvar->dtdv_hashval != hashval) {
+			if (dvar->dtdv_hashval == DTRACE_DYNHASH_SINK) {
+				/*
+				 * We've reached the sink, and therefore the
+				 * end of the hash chain; we can kick out of
+				 * the loop knowing that we have seen a valid
+				 * snapshot of state.
+				 */
+				ASSERT(dvar->dtdv_next == NULL);
+				ASSERT(dvar == &dtrace_dynhash_sink);
+				break;
+			}
+
+			if (dvar->dtdv_hashval == DTRACE_DYNHASH_FREE) {
+				/*
+				 * We've gone off the rails:  somewhere along
+				 * the line, one of the members of this hash
+				 * chain was deleted.  Note that we could also
+				 * detect this by simply letting this loop run
+				 * to completion, as we would eventually hit
+				 * the end of the dirty list.  However, we
+				 * want to avoid running the length of the
+				 * dirty list unnecessarily (it might be quite
+				 * long), so we catch this as early as
+				 * possible by detecting the hash marker.  In
+				 * this case, we simply set dvar to NULL and
+				 * break; the conditional after the loop will
+				 * send us back to top.
+				 */
+				dvar = NULL;
+				break;
+			}
+
+			goto next;
+		}
+
+		if (dtuple->dtt_nkeys != nkeys)
+			goto next;
+
+		for (i = 0; i < nkeys; i++, dkey++) {
+			if (dkey->dttk_size != key[i].dttk_size)
+				goto next; /* size or type mismatch */
+
+			if (dkey->dttk_size != 0) {
+				if (dtrace_bcmp(
+				    (void *)(uintptr_t)key[i].dttk_value,
+				    (void *)(uintptr_t)dkey->dttk_value,
+				    dkey->dttk_size))
+					goto next;
+			} else {
+				if (dkey->dttk_value != key[i].dttk_value)
+					goto next;
+			}
+		}
+
+		if (op != DTRACE_DYNVAR_DEALLOC)
+			return (dvar);
+
+		ASSERT(dvar->dtdv_next == NULL ||
+		    dvar->dtdv_next->dtdv_hashval != DTRACE_DYNHASH_FREE);
+
+		if (prev != NULL) {
+			ASSERT(hash[bucket].dtdh_chain != dvar);
+			ASSERT(start != dvar);
+			ASSERT(prev->dtdv_next == dvar);
+			prev->dtdv_next = dvar->dtdv_next;
+		} else {
+			if (dtrace_casptr(&hash[bucket].dtdh_chain,
+			    start, dvar->dtdv_next) != start) {
+				/*
+				 * We have failed to atomically swing the
+				 * hash table head pointer, presumably because
+				 * of a conflicting allocation on another CPU.
+				 * We need to reread the hash chain and try
+				 * again.
+				 */
+				goto top;
+			}
+		}
+
+		dtrace_membar_producer();
+
+		/*
+		 * Now set the hash value to indicate that it's free.
+		 */
+		ASSERT(hash[bucket].dtdh_chain != dvar);
+		dvar->dtdv_hashval = DTRACE_DYNHASH_FREE;
+
+		dtrace_membar_producer();
+
+		/*
+		 * Set the next pointer to point at the dirty list, and
+		 * atomically swing the dirty pointer to the newly freed dvar.
+		 */
+		do {
+			next = dcpu->dtdsc_dirty;
+			dvar->dtdv_next = next;
+		} while (dtrace_casptr(&dcpu->dtdsc_dirty, next, dvar) != next);
+
+		/*
+		 * Finally, unlock this hash bucket.
+		 */
+		ASSERT(hash[bucket].dtdh_lock == lock);
+		ASSERT(lock & 1);
+		hash[bucket].dtdh_lock++;
+
+		return (NULL);
+next:
+		prev = dvar;
+		continue;
+	}
+
+	if (dvar == NULL) {
+		/*
+		 * If dvar is NULL, it is because we went off the rails:
+		 * one of the elements that we traversed in the hash chain
+		 * was deleted while we were traversing it.  In this case,
+		 * we assert that we aren't doing a dealloc (deallocs lock
+		 * the hash bucket to prevent themselves from racing with
+		 * one another), and retry the hash chain traversal.
+		 */
+		ASSERT(op != DTRACE_DYNVAR_DEALLOC);
+		goto top;
+	}
+
+	if (op != DTRACE_DYNVAR_ALLOC) {
+		/*
+		 * If we are not to allocate a new variable, we want to
+		 * return NULL now.  Before we return, check that the value
+		 * of the lock word hasn't changed.  If it has, we may have
+		 * seen an inconsistent snapshot.
+		 */
+		if (op == DTRACE_DYNVAR_NOALLOC) {
+			if (hash[bucket].dtdh_lock != lock)
+				goto top;
+		} else {
+			ASSERT(op == DTRACE_DYNVAR_DEALLOC);
+			ASSERT(hash[bucket].dtdh_lock == lock);
+			ASSERT(lock & 1);
+			hash[bucket].dtdh_lock++;
+		}
+
+		return (NULL);
+	}
+
+	/*
+	 * We need to allocate a new dynamic variable.  The size we need is the
+	 * size of dtrace_dynvar plus the size of nkeys dtrace_key_t's plus the
+	 * size of any auxiliary key data (rounded up to 8-byte alignment) plus
+	 * the size of any referred-to data (dsize).  We then round the final
+	 * size up to the chunksize for allocation.
+	 */
+	for (ksize = 0, i = 0; i < nkeys; i++)
+		ksize += P2ROUNDUP(key[i].dttk_size, sizeof (uint64_t));
+
+	/*
+	 * This should be pretty much impossible, but could happen if, say,
+	 * strange DIF specified the tuple.  Ideally, this should be an
+	 * assertion and not an error condition -- but that requires that the
+	 * chunksize calculation in dtrace_difo_chunksize() be absolutely
+	 * bullet-proof.  (That is, it must not be able to be fooled by
+	 * malicious DIF.)  Given the lack of backwards branches in DIF,
+	 * solving this would presumably not amount to solving the Halting
+	 * Problem -- but it still seems awfully hard.
+	 */
+	if (sizeof (dtrace_dynvar_t) + sizeof (dtrace_key_t) * (nkeys - 1) +
+	    ksize + dsize > chunksize) {
+		dcpu->dtdsc_drops++;
+		return (NULL);
+	}
+
+	nstate = DTRACE_DSTATE_EMPTY;
+
+	do {
+retry:
+		free = dcpu->dtdsc_free;
+
+		if (free == NULL) {
+			dtrace_dynvar_t *clean = dcpu->dtdsc_clean;
+			void *rval;
+
+			if (clean == NULL) {
+				/*
+				 * We're out of dynamic variable space on
+				 * this CPU.  Unless we have tried all CPUs,
+				 * we'll try to allocate from a different
+				 * CPU.
+				 */
+				switch (dstate->dtds_state) {
+				case DTRACE_DSTATE_CLEAN: {
+					void *sp = &dstate->dtds_state;
+
+					if (++cpu >= NCPU)
+						cpu = 0;
+
+					if (dcpu->dtdsc_dirty != NULL &&
+					    nstate == DTRACE_DSTATE_EMPTY)
+						nstate = DTRACE_DSTATE_DIRTY;
+
+					if (dcpu->dtdsc_rinsing != NULL)
+						nstate = DTRACE_DSTATE_RINSING;
+
+					dcpu = &dstate->dtds_percpu[cpu];
+
+					if (cpu != me)
+						goto retry;
+
+					(void) dtrace_cas32(sp,
+					    DTRACE_DSTATE_CLEAN, nstate);
+
+					/*
+					 * To increment the correct bean
+					 * counter, take another lap.
+					 */
+					goto retry;
+				}
+
+				case DTRACE_DSTATE_DIRTY:
+					dcpu->dtdsc_dirty_drops++;
+					break;
+
+				case DTRACE_DSTATE_RINSING:
+					dcpu->dtdsc_rinsing_drops++;
+					break;
+
+				case DTRACE_DSTATE_EMPTY:
+					dcpu->dtdsc_drops++;
+					break;
+				}
+
+				DTRACE_CPUFLAG_SET(CPU_DTRACE_DROP);
+				return (NULL);
+			}
+
+			/*
+			 * The clean list appears to be non-empty.  We want to
+			 * move the clean list to the free list; we start by
+			 * moving the clean pointer aside.
+			 */
+			if (dtrace_casptr(&dcpu->dtdsc_clean,
+			    clean, NULL) != clean) {
+				/*
+				 * We are in one of two situations:
+				 *
+				 *  (a)	The clean list was switched to the
+				 *	free list by another CPU.
+				 *
+				 *  (b)	The clean list was added to by the
+				 *	cleansing cyclic.
+				 *
+				 * In either of these situations, we can
+				 * just reattempt the free list allocation.
+				 */
+				goto retry;
+			}
+
+			ASSERT(clean->dtdv_hashval == DTRACE_DYNHASH_FREE);
+
+			/*
+			 * Now we'll move the clean list to our free list.
+			 * It's impossible for this to fail:  the only way
+			 * the free list can be updated is through this
+			 * code path, and only one CPU can own the clean list.
+			 * Thus, it would only be possible for this to fail if
+			 * this code were racing with dtrace_dynvar_clean().
+			 * (That is, if dtrace_dynvar_clean() updated the clean
+			 * list, and we ended up racing to update the free
+			 * list.)  This race is prevented by the dtrace_sync()
+			 * in dtrace_dynvar_clean() -- which flushes the
+			 * owners of the clean lists out before resetting
+			 * the clean lists.
+			 */
+			dcpu = &dstate->dtds_percpu[me];
+			rval = dtrace_casptr(&dcpu->dtdsc_free, NULL, clean);
+			ASSERT(rval == NULL);
+			goto retry;
+		}
+
+		dvar = free;
+		new_free = dvar->dtdv_next;
+	} while (dtrace_casptr(&dcpu->dtdsc_free, free, new_free) != free);
+
+	/*
+	 * We have now allocated a new chunk.  We copy the tuple keys into the
+	 * tuple array and copy any referenced key data into the data space
+	 * following the tuple array.  As we do this, we relocate dttk_value
+	 * in the final tuple to point to the key data address in the chunk.
+	 */
+	kdata = (uintptr_t)&dvar->dtdv_tuple.dtt_key[nkeys];
+	dvar->dtdv_data = (void *)(kdata + ksize);
+	dvar->dtdv_tuple.dtt_nkeys = nkeys;
+
+	for (i = 0; i < nkeys; i++) {
+		dtrace_key_t *dkey = &dvar->dtdv_tuple.dtt_key[i];
+		size_t kesize = key[i].dttk_size;
+
+		if (kesize != 0) {
+			dtrace_bcopy(
+			    (const void *)(uintptr_t)key[i].dttk_value,
+			    (void *)kdata, kesize);
+			dkey->dttk_value = kdata;
+			kdata += P2ROUNDUP(kesize, sizeof (uint64_t));
+		} else {
+			dkey->dttk_value = key[i].dttk_value;
+		}
+
+		dkey->dttk_size = kesize;
+	}
+
+	ASSERT(dvar->dtdv_hashval == DTRACE_DYNHASH_FREE);
+	dvar->dtdv_hashval = hashval;
+	dvar->dtdv_next = start;
+
+	if (dtrace_casptr(&hash[bucket].dtdh_chain, start, dvar) == start)
+		return (dvar);
+
+	/*
+	 * The cas has failed.  Either another CPU is adding an element to
+	 * this hash chain, or another CPU is deleting an element from this
+	 * hash chain.  The simplest way to deal with both of these cases
+	 * (though not necessarily the most efficient) is to free our
+	 * allocated block and re-attempt it all.  Note that the free is
+	 * to the dirty list and _not_ to the free list.  This is to prevent
+	 * races with allocators, above.
+	 */
+	dvar->dtdv_hashval = DTRACE_DYNHASH_FREE;
+
+	dtrace_membar_producer();
+
+	do {
+		free = dcpu->dtdsc_dirty;
+		dvar->dtdv_next = free;
+	} while (dtrace_casptr(&dcpu->dtdsc_dirty, free, dvar) != free);
+
+	goto top;
+}
+
 static void
 dtrace_aggregate_min(uint64_t *oval, uint64_t nval, uint64_t arg)
 {
