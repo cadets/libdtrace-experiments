@@ -5930,6 +5930,12 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 				    (uint32_t *)arg0);
 				continue;
 
+			/*
+			 * FIXME: We definitely want to be able to get a proper
+			 * DTrace stack trace, but this should probably be done
+			 * with some re-usable code...?
+			 */
+#if 0
 			case DTRACEACT_JSTACK:
 			case DTRACEACT_USTACK:
 				if (!dtrace_priv_proc(state))
@@ -5971,6 +5977,7 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 				    DTRACE_USTACK_NFRAMES(rec->dtrd_arg) + 1);
 				DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
 				continue;
+#endif
 
 			default:
 				break;
@@ -6080,6 +6087,10 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 					dtrace_action_raise(val);
 				continue;
 
+			/*
+			 * FIXME: Ignore speculation for now
+			 */
+#if 0
 			case DTRACEACT_COMMIT:
 				assert(!committed);
 
@@ -6096,6 +6107,7 @@ dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
 			case DTRACEACT_DISCARD:
 				dtrace_speculation_discard(state, cpuid, val);
 				continue;
+#endif
 
 			case DTRACEACT_DIFEXPR:
 			case DTRACEACT_LIBACT:
