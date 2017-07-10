@@ -174,6 +174,44 @@ ATF_TC_BODY(dtrace_probe_lookup, tc)
 		atf_tc_fail("DTrace not properly deinitialized: %s", strerror(err));
 }
 
+ATF_TC_WITHOUT_HEAD(dtrace_probe);
+ATF_TC_BODY(dtrace_probe, tc)
+{
+	/*
+	 * Test whether or not DTrace probe segfaults.
+	 *
+	 * TODO: Test the results of dtrace_probe() by trying to figure out
+	 * whether or not the buffer snapshot is correct. We have to build an
+	 * API for that.
+	 */
+	dtrace_id_t probeid, lookupid;
+	dtrace_provider_id_t id;
+	int err;
+
+	err = dtrace_init();
+	if (err)
+		atf_tc_fail("DTrace not properly initialized: %s", strerror(err));
+
+	err = dtrace_register("test_provider", &test_provider_attr,
+	    DTRACE_PRIV_NONE, 0, &test_provider_ops, NULL, &id);
+	ATF_CHECK_EQ(0, err);
+
+	probeid = dtrace_probe_create(id, "test", "probe",
+	    "foo", 0, NULL);
+
+	lookupid = dtrace_probe_lookup(id, "test", "probe", "foo");
+	ATF_CHECK_EQ(probeid, lookupid);
+
+	dtrace_probe(probeid, 0, 0, 0, 0, 0);
+
+	err = dtrace_unregister(id);
+	ATF_CHECK_EQ(0, err);
+
+	err = dtrace_deinit();
+	if (err)
+		atf_tc_fail("DTrace not properly deinitialized: %s", strerror(err));
+}
+
 ATF_TP_ADD_TCS(tp)
 {
 	ATF_TP_ADD_TC(tp, dtrace_init);
@@ -182,6 +220,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, dtrace_register);
 	ATF_TP_ADD_TC(tp, dtrace_probe_create);
 	ATF_TP_ADD_TC(tp, dtrace_probe_lookup);
+	ATF_TP_ADD_TC(tp, dtrace_probe);
 
 	return (atf_no_error());
 }
