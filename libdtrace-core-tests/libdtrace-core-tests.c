@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -234,6 +235,7 @@ ATF_TC_BODY(DIF_OP_OR, tc)
 	dtrace_state_t *state;
 	dtrace_estate_t *estate;
 	dif_instr_t instr;
+	int err;
 
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
@@ -245,8 +247,9 @@ ATF_TC_BODY(DIF_OP_OR, tc)
 	estate->dtes_regs[2] = 0x006F000;
 
 	instr = DIF_INSTR_FMT(DIF_OP_OR, 1, 2, 3);
-	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(0xD06F00D, estate->dtes_regs[3]);
 
 	free(mstate);
@@ -267,6 +270,7 @@ ATF_TC_BODY(DIF_OP_XOR, tc)
 	dtrace_state_t *state;
 	dtrace_estate_t *estate;
 	dif_instr_t instr;
+	int err;
 
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
@@ -278,8 +282,9 @@ ATF_TC_BODY(DIF_OP_XOR, tc)
 	estate->dtes_regs[2] = 0x3FFFFC8;
 
 	instr = DIF_INSTR_FMT(DIF_OP_XOR, 1, 2, 3);
-	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(0xD06F00D, estate->dtes_regs[3]);
 
 	free(mstate);
@@ -299,6 +304,7 @@ ATF_TC_BODY(DIF_OP_AND, tc)
 	dtrace_state_t *state;
 	dtrace_estate_t *estate;
 	dif_instr_t instr;
+	int err;
 
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
@@ -310,8 +316,9 @@ ATF_TC_BODY(DIF_OP_AND, tc)
 	estate->dtes_regs[2] = 0xD00000D;
 
 	instr = DIF_INSTR_FMT(DIF_OP_AND, 1, 2, 3);
-	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(0xD00000D, estate->dtes_regs[3]);
 }
 
@@ -326,6 +333,7 @@ ATF_TC_BODY(DIF_OP_SLL, tc)
 	dtrace_state_t *state;
 	dtrace_estate_t *estate;
 	dif_instr_t instr;
+	int err;
 
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
@@ -337,8 +345,9 @@ ATF_TC_BODY(DIF_OP_SLL, tc)
 	estate->dtes_regs[2] = 20;
 
 	instr = DIF_INSTR_FMT(DIF_OP_SLL, 1, 2, 3);
-	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(0xD0600000, estate->dtes_regs[3]);
 }
 
@@ -353,6 +362,7 @@ ATF_TC_BODY(DIF_OP_SRL, tc)
 	dtrace_state_t *state;
 	dtrace_estate_t *estate;
 	dif_instr_t instr;
+	int err;
 
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
@@ -364,8 +374,9 @@ ATF_TC_BODY(DIF_OP_SRL, tc)
 	estate->dtes_regs[2] = 20;
 
 	instr = DIF_INSTR_FMT(DIF_OP_SRL, 1, 2, 3);
-	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(0xD06, estate->dtes_regs[3]);
 
 	free(mstate);
@@ -385,6 +396,7 @@ ATF_TC_BODY(DIF_OP_SUB, tc)
 	dtrace_state_t *state;
 	dtrace_estate_t *estate;
 	dif_instr_t instr;
+	int err;
 
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
@@ -396,8 +408,9 @@ ATF_TC_BODY(DIF_OP_SUB, tc)
 	estate->dtes_regs[2] = 0xC368;
 
 	instr = DIF_INSTR_FMT(DIF_OP_SUB, 1, 2, 3);
-	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(0xD06, estate->dtes_regs[3]);
 
 	free(mstate);
@@ -417,6 +430,7 @@ ATF_TC_BODY(DIF_OP_ADD, tc)
 	dtrace_state_t *state;
 	dtrace_estate_t *estate;
 	dif_instr_t instr;
+	int err;
 
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
@@ -428,8 +442,9 @@ ATF_TC_BODY(DIF_OP_ADD, tc)
 	estate->dtes_regs[2] = 0xC368;
 
 	instr = DIF_INSTR_FMT(DIF_OP_ADD, 1, 2, 3);
-	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(0xD06E, estate->dtes_regs[3]);
 }
 
@@ -444,6 +459,7 @@ ATF_TC_BODY(DIF_OP_MUL, tc)
 	dtrace_state_t *state;
 	dtrace_estate_t *estate;
 	dif_instr_t instr;
+	int err;
 
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
@@ -455,8 +471,9 @@ ATF_TC_BODY(DIF_OP_MUL, tc)
 	estate->dtes_regs[2] = 2;
 
 	instr = DIF_INSTR_FMT(DIF_OP_MUL, 1, 2, 3);
-	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(2048, estate->dtes_regs[3]);
 
 	free(mstate);
@@ -476,6 +493,7 @@ ATF_TC_BODY(DIF_OP_SDIV, tc)
 	dtrace_state_t *state;
 	dtrace_estate_t *estate;
 	dif_instr_t instr;
+	int err;
 
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
@@ -487,30 +505,89 @@ ATF_TC_BODY(DIF_OP_SDIV, tc)
 	estate->dtes_regs[2] = -2;
 
 	instr = DIF_INSTR_FMT(DIF_OP_SDIV, 1, 2, 3);
-	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(-512, estate->dtes_regs[3]);
+	ATF_CHECK_EQ(0, err);
 
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[1] = -1024;
 	estate->dtes_regs[2] = 2;
 
-	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(-512, estate->dtes_regs[3]);
 
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[1] = 1024;
 	estate->dtes_regs[2] = 2;
 
-	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(512, estate->dtes_regs[3]);
 
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[1] = -1024;
 	estate->dtes_regs[2] = -2;
 
-	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(512, estate->dtes_regs[3]);
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = -1024;
+	estate->dtes_regs[2] = 0;
+
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(EINVAL, err);
+	ATF_CHECK_EQ(0, estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_UDIV);
+ATF_TC_BODY(DIF_OP_UDIV, tc)
+{
+	/*
+	 * Test the UDIV operation of the DTrace machine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = 1024;
+	estate->dtes_regs[2] = 2;
+
+	instr = DIF_INSTR_FMT(DIF_OP_UDIV, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(512, estate->dtes_regs[3]);
+	ATF_CHECK_EQ(0, err);
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = 1024;
+	estate->dtes_regs[2] = 0;
+
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(EINVAL, err);
+	ATF_CHECK_EQ(0, estate->dtes_regs[3]);
 
 	free(mstate);
 	free(vstate);
@@ -540,6 +617,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_ADD);
 	ATF_TP_ADD_TC(tp, DIF_OP_MUL);
 	ATF_TP_ADD_TC(tp, DIF_OP_SDIV);
+	ATF_TP_ADD_TC(tp, DIF_OP_UDIV);
 #endif
 
 	return (atf_no_error());
