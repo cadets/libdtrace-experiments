@@ -903,6 +903,26 @@ typedef struct dtrace_vstate {
 } dtrace_vstate_t;
 
 /*
+ * The DTrace machine emulation state. This struct is responsible for
+ * maintaining a state within emulation of DIF instructions in the probe context
+ * and maintains all of the registers and conditions, but not the text segment
+ * itself.
+ */
+typedef struct dtrace_estate {
+	uint64_t dtes_regs[DIF_DIR_NREGS];
+	const uint64_t *dtes_inttab;
+	const char *dtes_strtab;
+	uint64_t dtes_rval;
+	int64_t dtes_cc_r;
+	uint_t dtes_pc;
+	uint_t dtes_textlen;
+	uint8_t dtes_cc_c;
+	uint8_t dtes_cc_n;
+	uint8_t dtes_cc_v;
+	uint8_t dtes_cc_z;
+} dtrace_estate_t;
+
+/*
  * DTrace Machine State
  *
  * In the process of processing a fired probe, DTrace needs to track and/or
@@ -1093,8 +1113,8 @@ struct dtrace_state {
 #endif
 	dtrace_activity_t dts_activity;		/* current activity */
 	dtrace_vstate_t dts_vstate;		/* variable state */
-	dtrace_buffer_t *dts_buffer;		/* principal buffer */
-	dtrace_buffer_t *dts_aggbuffer;		/* aggregation buffer */
+	dtrace_buffer_t /***/dts_buffer;		/* principal buffer */
+	dtrace_buffer_t /***/dts_aggbuffer;		/* aggregation buffer */
 	dtrace_speculation_t *dts_speculations;	/* speculation array */
 	int dts_nspeculations;			/* number of speculations */
 	int dts_naggregations;			/* number of aggregations */
