@@ -384,6 +384,33 @@ ATF_TC_BODY(DIF_OP_SUB, tc)
 	ATF_CHECK_EQ(0xD06, estate->dtes_regs[3]);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_OP_ADD);
+ATF_TC_BODY(DIF_OP_ADD, tc)
+{
+	/*
+	 * Test the XOR operation of the DTrace machine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = 3324;
+	estate->dtes_regs[2] = 10;
+
+	instr = DIF_INSTR_FMT(DIF_OP_ADD, 1, 2, 3);
+	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0xD06, estate->dtes_regs[3]);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -403,6 +430,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_SLL);
 	ATF_TP_ADD_TC(tp, DIF_OP_SRL);
 	ATF_TP_ADD_TC(tp, DIF_OP_SUB);
+	ATF_TP_ADD_TC(tp, DIF_OP_ADD);
 #endif
 
 	return (atf_no_error());
