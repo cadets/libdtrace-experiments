@@ -507,8 +507,8 @@ ATF_TC_BODY(DIF_OP_SDIV, tc)
 	instr = DIF_INSTR_FMT(DIF_OP_SDIV, 1, 2, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
-	ATF_CHECK_EQ(-512, estate->dtes_regs[3]);
 	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(-512, estate->dtes_regs[3]);
 
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[1] = -1024;
@@ -577,8 +577,51 @@ ATF_TC_BODY(DIF_OP_UDIV, tc)
 	instr = DIF_INSTR_FMT(DIF_OP_UDIV, 1, 2, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
-	ATF_CHECK_EQ(512, estate->dtes_regs[3]);
 	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(512, estate->dtes_regs[3]);
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = 1024;
+	estate->dtes_regs[2] = 0;
+
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(EINVAL, err);
+	ATF_CHECK_EQ(0, estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_SREM);
+ATF_TC_BODY(DIF_OP_SREM, tc)
+{
+	/*
+	 * Test the SREM operation of the DTrace machine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = 1024;
+	estate->dtes_regs[2] = 513;
+
+	instr = DIF_INSTR_FMT(DIF_OP_SREM, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(511, estate->dtes_regs[3]);
 
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[1] = 1024;
@@ -618,6 +661,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_MUL);
 	ATF_TP_ADD_TC(tp, DIF_OP_SDIV);
 	ATF_TP_ADD_TC(tp, DIF_OP_UDIV);
+	ATF_TP_ADD_TC(tp, DIF_OP_SREM);
 #endif
 
 	return (atf_no_error());
