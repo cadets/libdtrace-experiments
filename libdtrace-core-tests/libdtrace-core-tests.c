@@ -491,6 +491,27 @@ ATF_TC_BODY(DIF_OP_SDIV, tc)
 
 	ATF_CHECK_EQ(-512, estate->dtes_regs[3]);
 
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = -1024;
+	estate->dtes_regs[2] = 2;
+
+	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	ATF_CHECK_EQ(-512, estate->dtes_regs[3]);
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = 1024;
+	estate->dtes_regs[2] = 2;
+
+	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	ATF_CHECK_EQ(512, estate->dtes_regs[3]);
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = -1024;
+	estate->dtes_regs[2] = -2;
+
+	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	ATF_CHECK_EQ(512, estate->dtes_regs[3]);
+
 	free(mstate);
 	free(vstate);
 	free(state);
