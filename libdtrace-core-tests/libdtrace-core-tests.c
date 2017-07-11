@@ -47,6 +47,9 @@ ATF_TC_BODY(dtrace_deinit, tc)
 {
 	/*
 	 * Initializes the library and tests it's de-initialization
+	 *
+	 * NOTE: This also tests dtrace_unregister(), so it's not necessary to
+	 * separately test it as a black box.
 	 */
 	int err;
 
