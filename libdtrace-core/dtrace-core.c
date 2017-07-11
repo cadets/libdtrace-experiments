@@ -8103,6 +8103,10 @@ dtrace_store_by_ref(dtrace_difo_t *dp, caddr_t tomax, size_t size,
  * is the function called by the provider to fire a probe -- from which all
  * subsequent probe-context DTrace activity emanates.
  */
+/*
+ * TODO: Split out the DIF interpreter from this function. We do not require
+ * mass speed in this case, we want to be able to unit test and fuzz it.
+ */
 void
 dtrace_probe(dtrace_id_t id, uintptr_t arg0, uintptr_t arg1,
     uintptr_t arg2, uintptr_t arg3, uintptr_t arg4)
