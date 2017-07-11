@@ -212,6 +212,24 @@ ATF_TC_BODY(dtrace_probe, tc)
 		atf_tc_fail("DTrace not properly deinitialized: %s", strerror(err));
 }
 
+/*
+ * We define _DTRACE_TESTS in order to be able to test the DIF interpreter and
+ * various other things that should usually not be exposed to the clients of the
+ * library.
+ */
+#ifdef _DTRACE_TESTS
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_OR);
+ATF_TC_BODY(DIF_OP_OR, tc)
+{
+	/*
+	 * Test the OR operation of the DTrace machine.
+	 */
+	
+}
+
+#endif
+
 ATF_TP_ADD_TCS(tp)
 {
 	ATF_TP_ADD_TC(tp, dtrace_init);
@@ -221,6 +239,10 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, dtrace_probe_create);
 	ATF_TP_ADD_TC(tp, dtrace_probe_lookup);
 	ATF_TP_ADD_TC(tp, dtrace_probe);
+
+#ifdef _DTRACE_TESTS
+	ATF_TP_ADD_TC(tp, DIF_OP_OR);
+#endif
 
 	return (atf_no_error());
 }
