@@ -283,7 +283,7 @@ ATF_TC_WITHOUT_HEAD(DIF_OP_AND);
 ATF_TC_BODY(DIF_OP_AND, tc)
 {
 	/*
-	 * Test the XOR operation of the DTrace machine.
+	 * Test the AND operation of the DTrace machine.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -310,7 +310,7 @@ ATF_TC_WITHOUT_HEAD(DIF_OP_SLL);
 ATF_TC_BODY(DIF_OP_SLL, tc)
 {
 	/*
-	 * Test the XOR operation of the DTrace machine.
+	 * Test the SLL operation of the DTrace machine.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -337,7 +337,7 @@ ATF_TC_WITHOUT_HEAD(DIF_OP_SRL);
 ATF_TC_BODY(DIF_OP_SRL, tc)
 {
 	/*
-	 * Test the XOR operation of the DTrace machine.
+	 * Test the SRL operation of the DTrace machine.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -391,7 +391,7 @@ ATF_TC_WITHOUT_HEAD(DIF_OP_ADD);
 ATF_TC_BODY(DIF_OP_ADD, tc)
 {
 	/*
-	 * Test the XOR operation of the DTrace machine.
+	 * Test the ADD operation of the DTrace machine.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -418,7 +418,7 @@ ATF_TC_WITHOUT_HEAD(DIF_OP_MUL);
 ATF_TC_BODY(DIF_OP_MUL, tc)
 {
 	/*
-	 * Test the XOR operation of the DTrace machine.
+	 * Test the MUL operation of the DTrace machine.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
