@@ -249,6 +249,11 @@ ATF_TC_BODY(DIF_OP_OR, tc)
 
 	ATF_CHECK_EQ(0xD06F00D, estate->dtes_regs[3]);
 
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_XOR);
@@ -277,6 +282,10 @@ ATF_TC_BODY(DIF_OP_XOR, tc)
 
 	ATF_CHECK_EQ(0xD06F00D, estate->dtes_regs[3]);
 
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_AND);
@@ -358,6 +367,11 @@ ATF_TC_BODY(DIF_OP_SRL, tc)
 	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(0xD06, estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_SUB);
@@ -385,6 +399,11 @@ ATF_TC_BODY(DIF_OP_SUB, tc)
 	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(0xD06, estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_ADD);
@@ -439,6 +458,11 @@ ATF_TC_BODY(DIF_OP_MUL, tc)
 	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(2048, estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
 }
 
 #endif
