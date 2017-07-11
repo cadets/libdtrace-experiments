@@ -1294,7 +1294,7 @@ extern void dtrace_copystr(uintptr_t, uintptr_t, size_t, volatile uint16_t *);
 #endif
 
 #ifdef _DTRACE_TESTS
-int dtrace_emul_instruction(dif_instr_t, dtrace_estate_t *, dtrace_mstate_t *,
+void dtrace_emul_instruction(dif_instr_t, dtrace_estate_t *, dtrace_mstate_t *,
     dtrace_vstate_t *, dtrace_state_t *);
 #endif
 

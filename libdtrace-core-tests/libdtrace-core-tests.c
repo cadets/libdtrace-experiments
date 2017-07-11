@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <atf-c.h>
 
@@ -225,7 +226,54 @@ ATF_TC_BODY(DIF_OP_OR, tc)
 	/*
 	 * Test the OR operation of the DTrace machine.
 	 */
-	
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = 0xD00000D;
+	estate->dtes_regs[2] = 0x006F000;
+
+	instr = DIF_INSTR_FMT(DIF_OP_OR, 1, 2, 3);
+	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0xD06F00D, estate->dtes_regs[3]);
+
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_XOR);
+ATF_TC_BODY(DIF_OP_XOR, tc)
+{
+	/*
+	 * Test the XOR operation of the DTrace machine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = 0xEF90FC5;
+	estate->dtes_regs[2] = 0x3FFFFC8;
+
+	instr = DIF_INSTR_FMT(DIF_OP_XOR, 1, 2, 3);
+	dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0xD06F00D, estate->dtes_regs[3]);
+
 }
 
 #endif
@@ -242,6 +290,7 @@ ATF_TP_ADD_TCS(tp)
 
 #ifdef _DTRACE_TESTS
 	ATF_TP_ADD_TC(tp, DIF_OP_OR);
+	ATF_TP_ADD_TC(tp, DIF_OP_XOR);
 #endif
 
 	return (atf_no_error());

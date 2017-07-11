@@ -8,7 +8,7 @@ test:
 	LD_LIBRARY_PATH=${.OBJDIR}/libdtrace-core kyua test
 
 debugtest:
-	LD_LIBRARY_PATH=${.OBJDIR}/libdtrace-core kyua debug ${TEST}
+	LD_LIBRARY_PATH=${.OBJDIR}/libdtrace-core kyua debug libdtrace-core-tests/libdtrace-core-tests:${TEST}
 
 junit:
 	kyua report-junit

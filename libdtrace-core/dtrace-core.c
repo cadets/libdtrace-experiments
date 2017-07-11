@@ -7227,9 +7227,9 @@ inetout:	regs[rd] = (uintptr_t)end + 1;
 }
 
 #ifdef _DTRACE_TESTS
-int
+void
 #else
-static int
+static void
 #endif
 dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
     dtrace_mstate_t *mstate, dtrace_vstate_t *vstate, dtrace_state_t *state)
@@ -8049,8 +8049,6 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 	estate->dtes_cc_z = cc_z;
 	estate->dtes_cc_v = cc_v;
 	estate->dtes_cc_c = cc_c;
-
-	return (0);
 }
 
 /*
