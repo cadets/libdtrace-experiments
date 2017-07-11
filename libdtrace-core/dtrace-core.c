@@ -7227,7 +7227,7 @@ inetout:	regs[rd] = (uintptr_t)end + 1;
 }
 
 #ifdef _DTRACE_TESTS
-void
+int
 #else
 static void
 #endif
@@ -7254,6 +7254,9 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 	uint64_t textlen;
 	const uint64_t *inttab = estate->dtes_inttab;
 	const char *strtab = estate->dtes_strtab;
+#ifdef _DTRACE_TESTS
+	int err = 0;
+#endif
 
 	/*
 	 * For the sake of code simplicity, we copy all the arguments locally
@@ -7307,6 +7310,9 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 		if (regs[r2] == 0) {
 			regs[rd] = 0;
 			*flags |= CPU_DTRACE_DIVZERO;
+#ifdef _DTRACE_TESTS
+			err = EINVAL;
+#endif
 		} else {
 			regs[rd] = (int64_t)regs[r1] /
 			    (int64_t)regs[r2];
@@ -7317,6 +7323,9 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 		if (regs[r2] == 0) {
 			regs[rd] = 0;
 			*flags |= CPU_DTRACE_DIVZERO;
+#ifdef _DTRACE_TESTS
+			err = EINVAL;
+#endif
 		} else {
 			regs[rd] = regs[r1] / regs[r2];
 		}
@@ -7326,6 +7335,9 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 		if (regs[r2] == 0) {
 			regs[rd] = 0;
 			*flags |= CPU_DTRACE_DIVZERO;
+#ifdef _DTRACE_TESTS
+			err = EINVAL;
+#endif
 		} else {
 			regs[rd] = (int64_t)regs[r1] %
 			    (int64_t)regs[r2];
@@ -7336,6 +7348,9 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 		if (regs[r2] == 0) {
 			regs[rd] = 0;
 			*flags |= CPU_DTRACE_DIVZERO;
+#ifdef _DTRACE_TESTS
+			err = EINVAL;
+#endif
 		} else {
 			regs[rd] = regs[r1] % regs[r2];
 		}
@@ -7609,6 +7624,9 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 		 * present.  This opcode is saved for future work.
 		 */
 		*flags |= CPU_DTRACE_ILLOP;
+#ifdef _DTRACE_TESTS
+			err = EOPNOTSUPP;
+#endif
 		regs[rd] = 0;
 		break;
 
@@ -7807,6 +7825,9 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 	case DIF_OP_PUSHTR:
 		if (ttop == DIF_DTR_NREGS) {
 			*flags |= CPU_DTRACE_TUPOFLOW;
+#ifdef _DTRACE_TESTS
+			err = EOVERFLOW;
+#endif
 			break;
 		}
 
@@ -7826,6 +7847,9 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 		} else {
 			if (regs[r2] > LONG_MAX) {
 				*flags |= CPU_DTRACE_ILLOP;
+#ifdef _DTRACE_TESTS
+				err = EOVERFLOW;
+#endif
 				break;
 			}
 
@@ -7838,6 +7862,9 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 	case DIF_OP_PUSHTV:
 		if (ttop == DIF_DTR_NREGS) {
 			*flags |= CPU_DTRACE_TUPOFLOW;
+#ifdef _DTRACE_TESTS
+			err = EOVERFLOW;
+#endif
 			break;
 		}
 
@@ -7975,6 +8002,9 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 		if (!dtrace_canstore(regs[rd], regs[r2],
 		    mstate, vstate)) {
 			*flags |= CPU_DTRACE_BADADDR;
+#ifdef _DTRACE_TESTS
+			err = EFAULT;
+#endif
 			*illval = regs[rd];
 			break;
 		}
@@ -7989,6 +8019,9 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 	case DIF_OP_STB:
 		if (!dtrace_canstore(regs[rd], 1, mstate, vstate)) {
 			*flags |= CPU_DTRACE_BADADDR;
+#ifdef _DTRACE_TESTS
+			err = EFAULT;
+#endif
 			*illval = regs[rd];
 			break;
 		}
@@ -7998,11 +8031,20 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 	case DIF_OP_STH:
 		if (!dtrace_canstore(regs[rd], 2, mstate, vstate)) {
 			*flags |= CPU_DTRACE_BADADDR;
+#ifdef _DTRACE_TESTS
+			err = EFAULT;
+#endif
 			*illval = regs[rd];
 			break;
 		}
 		if (regs[rd] & 1) {
 			*flags |= CPU_DTRACE_BADALIGN;
+			/*
+			 * XXX: Is this correct?
+			 */
+#ifdef _DTRACE_TESTS
+			err = EFAULT;
+#endif
 			*illval = regs[rd];
 			break;
 		}
@@ -8012,11 +8054,20 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 	case DIF_OP_STW:
 		if (!dtrace_canstore(regs[rd], 4, mstate, vstate)) {
 			*flags |= CPU_DTRACE_BADADDR;
+#ifdef _DTRACE_TESTS
+			err = EFAULT;
+#endif
 			*illval = regs[rd];
 			break;
 		}
 		if (regs[rd] & 3) {
 			*flags |= CPU_DTRACE_BADALIGN;
+			/*
+			 * XXX: Is this correct?
+			 */
+#ifdef _DTRACE_TESTS
+			err = EFAULT;
+#endif
 			*illval = regs[rd];
 			break;
 		}
@@ -8026,11 +8077,20 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 	case DIF_OP_STX:
 		if (!dtrace_canstore(regs[rd], 8, mstate, vstate)) {
 			*flags |= CPU_DTRACE_BADADDR;
+#ifdef _DTRACE_TESTS
+			err = EFAULT;
+#endif
 			*illval = regs[rd];
 			break;
 		}
 		if (regs[rd] & 7) {
 			*flags |= CPU_DTRACE_BADALIGN;
+			/*
+			 * XXX: Is this correct?
+			 */
+#ifdef _DTRACE_TESTS
+			err = EFAULT;
+#endif
 			*illval = regs[rd];
 			break;
 		}
@@ -8049,6 +8109,10 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 	estate->dtes_cc_z = cc_z;
 	estate->dtes_cc_v = cc_v;
 	estate->dtes_cc_c = cc_c;
+
+#ifdef _DTRACE_TESTS
+	return (err);
+#endif
 }
 
 /*
