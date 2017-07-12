@@ -93,11 +93,25 @@
 #define	DTRACE_ALIGNCHECK(addr, size, flags)
 #endif
 
+#define DTRACE_LOADFUNC(bits)						\
+uint##bits##_t								\
+dtrace_load##bits(uintptr_t addr)					\
+{									\
+	uint##bits##_t rval;						\
+	rval = *((volatile uint##bits##_t *)addr);			\
+	return (rval);							\
+}
+
+/*
+ * This function is very specific to the kernel. Though it might do some things
+ * we are interested in, for now, we will just set the value.
+ */
+#if 0
 #define	DTRACE_LOADFUNC(bits)						\
 /*CSTYLED*/								\
 uint##bits##_t								\
 dtrace_load##bits(uintptr_t addr)					\
-{									\
+{									
 	size_t size = bits / NBBY;					\
 	/*CSTYLED*/							\
 	uint##bits##_t rval;						\
@@ -128,7 +142,9 @@ dtrace_load##bits(uintptr_t addr)					\
 	*flags &= ~CPU_DTRACE_NOFAULT;					\
 									\
 	return (!(*flags & CPU_DTRACE_FAULT) ? rval : 0);		\
+	
 }
+#endif
 
 #ifdef _LP64
 #define	dtrace_loadptr	dtrace_load64
@@ -10850,6 +10866,51 @@ dtrace_probe_foreach(uintptr_t offs)
 }
 #endif
 
+/*ARGSUSED*/
+void
+dtrace_toxic_ranges(void (*func)(uintptr_t base, uintptr_t limit))
+{
+	(*func)(0, (uintptr_t) 0);
+}
+
+static void
+dtrace_toxrange_add(uintptr_t base, uintptr_t limit)
+{
+	if (dtrace_toxranges >= dtrace_toxranges_max) {
+		int osize, nsize;
+		dtrace_toxrange_t *range;
+
+		osize = dtrace_toxranges_max * sizeof (dtrace_toxrange_t);
+
+		if (osize == 0) {
+			ASSERT(dtrace_toxrange == NULL);
+			ASSERT(dtrace_toxranges_max == 0);
+			dtrace_toxranges_max = 1;
+		} else {
+			dtrace_toxranges_max <<= 1;
+		}
+
+		nsize = dtrace_toxranges_max * sizeof (dtrace_toxrange_t);
+		range = malloc(nsize);
+		assert(range != NULL);
+
+		if (dtrace_toxrange != NULL) {
+			ASSERT(osize != 0);
+			bcopy(dtrace_toxrange, range, osize);
+			free(dtrace_toxrange);
+		}
+
+		dtrace_toxrange = range;
+	}
+
+	ASSERT(dtrace_toxrange[dtrace_toxranges].dtt_base == 0);
+	ASSERT(dtrace_toxrange[dtrace_toxranges].dtt_limit == 0);
+
+	dtrace_toxrange[dtrace_toxranges].dtt_base = base;
+	dtrace_toxrange[dtrace_toxranges].dtt_limit = limit;
+	dtrace_toxranges++;
+}
+
 int
 dtrace_init(void)
 {
@@ -10869,6 +10930,8 @@ dtrace_init(void)
 	dtrace_byname = dtrace_hash_create(offsetof(dtrace_probe_t, dtpr_name),
 	    offsetof(dtrace_probe_t, dtpr_nextname),
 	    offsetof(dtrace_probe_t, dtpr_prevname));
+
+	dtrace_toxic_ranges(dtrace_toxrange_add);
 
 	err = dtrace_register("dtrace", &dtrace_provider_attr,
 	    DTRACE_PRIV_NONE, 0, &dtrace_provider_ops, NULL, &id);
