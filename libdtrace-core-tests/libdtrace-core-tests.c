@@ -1937,7 +1937,7 @@ ATF_TC_BODY(DIF_OP_LDSB_NEG, tc)
 	int8_t res;
 
 	var = malloc(sizeof (int8_t));
-	*var = -73;
+	*var = -1;
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
 	state = calloc(1, sizeof (dtrace_state_t));
@@ -1951,7 +1951,7 @@ ATF_TC_BODY(DIF_OP_LDSB_NEG, tc)
 
 	ATF_CHECK_EQ(0, err);
 	res = (int8_t) estate->dtes_regs[3];
-	ATF_CHECK_EQ(-73, res);
+	ATF_CHECK_EQ(-1, res);
 
 	free(mstate);
 	free(vstate);
@@ -2013,7 +2013,7 @@ ATF_TC_BODY(DIF_OP_LDSH_NEG, tc)
 	int16_t res;
 
 	var = malloc(sizeof (int16_t));
-	*var = -7357;
+	*var = -1;
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
 	state = calloc(1, sizeof (dtrace_state_t));
@@ -2027,7 +2027,7 @@ ATF_TC_BODY(DIF_OP_LDSH_NEG, tc)
 
 	ATF_CHECK_EQ(0, err);
 	res = (int16_t) estate->dtes_regs[3];
-	ATF_CHECK_EQ(-7357, res);
+	ATF_CHECK_EQ(-1, res);
 
 	free(mstate);
 	free(vstate);
