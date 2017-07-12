@@ -292,6 +292,44 @@ ATF_TC_BODY(DIF_OP_NOP, tc)
 
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_OP_RET);
+ATF_TC_BODY(DIF_OP_RET, tc)
+{
+	/*
+	 * Test the OR operation of the DTrace machine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[3] = EPERM;
+	estate->dtes_pc = 0;
+	estate->dtes_textlen = 1000;
+
+	instr = DIF_INSTR_FMT(DIF_OP_RET, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(EPERM, estate->dtes_rval);
+	ATF_CHECK_EQ(EPERM, estate->dtes_regs[3]);
+	ATF_CHECK_EQ(1000, estate->dtes_pc);
+	ATF_CHECK_EQ(1000, estate->dtes_textlen);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 ATF_TC_WITHOUT_HEAD(DIF_OP_OR);
 ATF_TC_BODY(DIF_OP_OR, tc)
 {
@@ -324,7 +362,6 @@ ATF_TC_BODY(DIF_OP_OR, tc)
 	free(vstate);
 	free(state);
 	free(estate);
-
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_XOR);
@@ -2753,6 +2790,7 @@ ATF_TP_ADD_TCS(tp)
 	 * expecting them to fail and so on...
 	 */
 	ATF_TP_ADD_TC(tp, DIF_OP_NOP);
+	ATF_TP_ADD_TC(tp, DIF_OP_RET);
 	ATF_TP_ADD_TC(tp, DIF_OP_OR);
 	ATF_TP_ADD_TC(tp, DIF_OP_XOR);
 	ATF_TP_ADD_TC(tp, DIF_OP_AND);
