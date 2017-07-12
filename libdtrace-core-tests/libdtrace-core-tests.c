@@ -1703,6 +1703,154 @@ ATF_TC_BODY(DIF_OP_BLU_FAIL, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_OP_BLE_SUCCESS_POS);
+ATF_TC_BODY(DIF_OP_BLE_SUCCESS_POS, tc)
+{
+	/*
+	 * Test the BLE operation of the DTrace machine when it branches given a
+	 * positive number.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_pc = 0;
+	estate->dtes_cc_z = 0;
+	estate->dtes_cc_n = 0;
+	estate->dtes_cc_v = 1;
+
+	instr = DIF_INSTR_BRANCH(DIF_OP_BLE, 0xD06E);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(0xD06E, estate->dtes_pc);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_BLE_SUCCESS_NEG);
+ATF_TC_BODY(DIF_OP_BLE_SUCCESS_NEG, tc)
+{
+	/*
+	 * Test the BLE operation of the DTrace machine when it branches given a
+	 * negative number.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_pc = 0;
+	estate->dtes_cc_z = 0;
+	estate->dtes_cc_n = 1;
+	estate->dtes_cc_v = 0;
+
+	instr = DIF_INSTR_BRANCH(DIF_OP_BLE, 0xD06E);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(0xD06E, estate->dtes_pc);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_BLE_FAIL_POS);
+ATF_TC_BODY(DIF_OP_BLE_FAIL_POS, tc)
+{
+	/*
+	 * Test the BLE operation of the DTrace machine when it doesn't branch
+	 * given a positive number.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_pc = 0;
+	estate->dtes_cc_z = 0;
+	estate->dtes_cc_n = 0;
+	estate->dtes_cc_v = 0;
+
+	instr = DIF_INSTR_BRANCH(DIF_OP_BLE, 0xD06E);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(0, estate->dtes_pc);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_BLE_FAIL_NEG);
+ATF_TC_BODY(DIF_OP_BLE_FAIL_NEG, tc)
+{
+	/*
+	 * Test the BLE operation of the DTrace machine when it doesn't branch
+	 * given a negative number.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_pc = 0;
+	estate->dtes_cc_z = 0;
+	estate->dtes_cc_n = 1;
+	estate->dtes_cc_v = 1;
+
+	instr = DIF_INSTR_BRANCH(DIF_OP_BLE, 0xD06E);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(0, estate->dtes_pc);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -1755,6 +1903,10 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_BL_FAIL_NEG);
 	ATF_TP_ADD_TC(tp, DIF_OP_BLU_SUCCESS);
 	ATF_TP_ADD_TC(tp, DIF_OP_BLU_FAIL);
+	ATF_TP_ADD_TC(tp, DIF_OP_BLE_SUCCESS_POS);
+	ATF_TP_ADD_TC(tp, DIF_OP_BLE_SUCCESS_NEG);
+	ATF_TP_ADD_TC(tp, DIF_OP_BLE_FAIL_POS);
+	ATF_TP_ADD_TC(tp, DIF_OP_BLE_FAIL_NEG);
 #endif
 
 	return (atf_no_error());
