@@ -1925,7 +1925,7 @@ ATF_TC_WITHOUT_HEAD(DIF_OP_LDSB_NEG);
 ATF_TC_BODY(DIF_OP_LDSB_NEG, tc)
 {
 	/*
-	 * Test the LDSB operation of the DTrace machine.
+	 * Test the LDSB operation of the DTrace machine given a negative number.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -1963,7 +1963,7 @@ ATF_TC_WITHOUT_HEAD(DIF_OP_LDSB_POS);
 ATF_TC_BODY(DIF_OP_LDSB_POS, tc)
 {
 	/*
-	 * Test the LDSB operation of the DTrace machine.
+	 * Test the LDSB operation of the DTrace machine given a positive number.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -2001,7 +2001,7 @@ ATF_TC_WITHOUT_HEAD(DIF_OP_LDSH_NEG);
 ATF_TC_BODY(DIF_OP_LDSH_NEG, tc)
 {
 	/*
-	 * Test the LDSB operation of the DTrace machine.
+	 * Test the LDSH operation of the DTrace machine given a negative number.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -2039,7 +2039,7 @@ ATF_TC_WITHOUT_HEAD(DIF_OP_LDSH_POS);
 ATF_TC_BODY(DIF_OP_LDSH_POS, tc)
 {
 	/*
-	 * Test the LDSB operation of the DTrace machine.
+	 * Test the LDSH operation of the DTrace machine given a positive number.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -2073,6 +2073,82 @@ ATF_TC_BODY(DIF_OP_LDSH_POS, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_OP_LDSW_NEG);
+ATF_TC_BODY(DIF_OP_LDSW_NEG, tc)
+{
+	/*
+	 * Test the LDSW operation of the DTrace machine given a negative number.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	int32_t *var;
+	int32_t res;
+
+	var = malloc(sizeof (int16_t));
+	*var = -7357116;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_LDSW, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	res = (int32_t) estate->dtes_regs[3];
+	ATF_CHECK_EQ(-7357116, res);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_LDSW_POS);
+ATF_TC_BODY(DIF_OP_LDSW_POS, tc)
+{
+	/*
+	 * Test the LDSW operation of the DTrace machine given a positive number.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	int32_t *var;
+	int32_t res;
+
+	var = malloc(sizeof (int16_t));
+	*var = 7357116;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_LDSW, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	res = (int32_t) estate->dtes_regs[3];
+	ATF_CHECK_EQ(7357116, res);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -2086,6 +2162,11 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, dtrace_probe);
 
 #ifdef _DTRACE_TESTS
+	/*
+	 * TODO: For all of these tests, we should also add tests for boundary
+	 * conditions, such as hitting the limit of integers, overflowing them,
+	 * expecting them to fail and so on...
+	 */
 	ATF_TP_ADD_TC(tp, DIF_OP_OR);
 	ATF_TP_ADD_TC(tp, DIF_OP_XOR);
 	ATF_TP_ADD_TC(tp, DIF_OP_AND);
@@ -2135,6 +2216,8 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_LDSB_POS);
 	ATF_TP_ADD_TC(tp, DIF_OP_LDSH_NEG);
 	ATF_TP_ADD_TC(tp, DIF_OP_LDSH_POS);
+	ATF_TP_ADD_TC(tp, DIF_OP_LDSW_NEG);
+	ATF_TP_ADD_TC(tp, DIF_OP_LDSW_POS);
 #endif
 
 	return (atf_no_error());
