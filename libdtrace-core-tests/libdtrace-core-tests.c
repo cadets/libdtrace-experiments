@@ -1921,6 +1921,39 @@ ATF_TC_BODY(DIF_OP_BLEU_FAIL, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_OP_LDSB);
+ATF_TC_BODY(DIF_OP_LDSB, tc)
+{
+	/*
+	 * Test the LDSB operation of the DTrace machine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = 0xD06;
+
+	instr = DIF_INSTR_FMT(DIF_OP_LDSB, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(0xD06, estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -1979,6 +2012,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_BLE_FAIL_NEG);
 	ATF_TP_ADD_TC(tp, DIF_OP_BLEU_SUCCESS);
 	ATF_TP_ADD_TC(tp, DIF_OP_BLEU_FAIL);
+	ATF_TP_ADD_TC(tp, DIF_OP_LDSB);
 #endif
 
 	return (atf_no_error());

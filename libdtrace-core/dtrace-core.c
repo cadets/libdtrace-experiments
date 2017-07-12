@@ -82,6 +82,60 @@
 	((flags) & CPU_DTRACE_BADSTACK) ?  DTRACEFLT_BADSTACK :		\
 	DTRACEFLT_UNKNOWN)
 
+#ifndef __x86
+#define	DTRACE_ALIGNCHECK(addr, size, flags)				\
+	if (addr & (size - 1)) {					\
+		*flags |= CPU_DTRACE_BADALIGN;				\
+		cpuc_dtrace_illval = addr;				\
+		return (0);						\
+	}
+#else
+#define	DTRACE_ALIGNCHECK(addr, size, flags)
+#endif
+
+#define	DTRACE_LOADFUNC(bits)						\
+/*CSTYLED*/								\
+uint##bits##_t								\
+dtrace_load##bits(uintptr_t addr)					\
+{									\
+	size_t size = bits / NBBY;					\
+	/*CSTYLED*/							\
+	uint##bits##_t rval;						\
+	int i;								\
+	volatile uint16_t *flags = (volatile uint16_t *)		\
+	    &cpuc_dtrace_flags;						\
+									\
+	DTRACE_ALIGNCHECK(addr, size, flags);				\
+									\
+	for (i = 0; i < dtrace_toxranges; i++) {			\
+		if (addr >= dtrace_toxrange[i].dtt_limit)		\
+			continue;					\
+									\
+		if (addr + size <= dtrace_toxrange[i].dtt_base)		\
+			continue;					\
+									\
+		/*							\
+		 * This address falls within a toxic region; return 0.	\
+		 */							\
+		*flags |= CPU_DTRACE_BADADDR;				\
+		cpuc_dtrace_illval = addr;		\
+		return (0);						\
+	}								\
+									\
+	*flags |= CPU_DTRACE_NOFAULT;					\
+	/*CSTYLED*/							\
+	rval = *((volatile uint##bits##_t *)addr);			\
+	*flags &= ~CPU_DTRACE_NOFAULT;					\
+									\
+	return (!(*flags & CPU_DTRACE_FAULT) ? rval : 0);		\
+}
+
+#ifdef _LP64
+#define	dtrace_loadptr	dtrace_load64
+#else
+#define	dtrace_loadptr	dtrace_load32
+#endif
+
 /*
  * Userspace shim...
  */
@@ -291,6 +345,17 @@ dtrace_strdup(const char *str)
 
 	return (new);
 }
+
+/*
+ * Use the DTRACE_LOADFUNC macro to define functions for each of loading a
+ * uint8_t, a uint16_t, a uint32_t and a uint64_t.
+ */
+/* BEGIN CSTYLED */
+DTRACE_LOADFUNC(8)
+DTRACE_LOADFUNC(16)
+DTRACE_LOADFUNC(32)
+DTRACE_LOADFUNC(64)
+/* END CSTYLED */
 
 static int
 dtrace_inscratch(uintptr_t dest, size_t size, dtrace_mstate_t *mstate)
