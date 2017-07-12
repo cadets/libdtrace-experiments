@@ -2359,6 +2359,381 @@ ATF_TC_BODY(DIF_OP_LDUW, tc)
 	free(estate);
 }
 
+/*
+ * TODO: RLD* are not properly implemented due to the fact that dtrace_canload()
+ * is not implemented and just returns 1. We should implement that in order to
+ * test these properly, but the tests are outlined in order for completeness.
+ */
+ATF_TC_WITHOUT_HEAD(DIF_OP_RLDSB_NEG);
+ATF_TC_BODY(DIF_OP_RLDSB_NEG, tc)
+{
+	/*
+	 * Test the RLDSB operation of the DTrace machine given a negative number.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	int8_t *var;
+
+	var = malloc(sizeof (int8_t));
+	*var = -1;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_RLDSB, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(0xFFFFFFFFFFFFFFFF, estate->dtes_regs[3]);
+
+	free(var);
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_RLDSB_POS);
+ATF_TC_BODY(DIF_OP_RLDSB_POS, tc)
+{
+	/*
+	 * Test the RLDSB operation of the DTrace machine given a positive number.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	int8_t *var;
+
+	var = malloc(sizeof (int8_t));
+	*var = 73;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_RLDSB, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(73, estate->dtes_regs[3]);
+
+	free(var);
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_RLDSH_NEG);
+ATF_TC_BODY(DIF_OP_RLDSH_NEG, tc)
+{
+	/*
+	 * Test the RLDSH operation of the DTrace machine given a negative number.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	int16_t *var;
+
+	var = malloc(sizeof (int16_t));
+	*var = -1;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_RLDSH, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(0xFFFFFFFFFFFFFFFF, estate->dtes_regs[3]);
+
+	free(var);
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_RLDSH_POS);
+ATF_TC_BODY(DIF_OP_RLDSH_POS, tc)
+{
+	/*
+	 * Test the RLDSH operation of the DTrace machine given a positive number.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	int16_t *var;
+
+	var = malloc(sizeof (int16_t));
+	*var = 7357;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_RLDSH, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(7357, estate->dtes_regs[3]);
+
+	free(var);
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_RLDSW_NEG);
+ATF_TC_BODY(DIF_OP_RLDSW_NEG, tc)
+{
+	/*
+	 * Test the RLDSW operation of the DTrace machine given a negative number.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	int32_t *var;
+
+	var = malloc(sizeof (int16_t));
+	*var = -1;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_RLDSW, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(0xFFFFFFFFFFFFFFFF, estate->dtes_regs[3]);
+
+	free(var);
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_RLDSW_POS);
+ATF_TC_BODY(DIF_OP_RLDSW_POS, tc)
+{
+	/*
+	 * Test the RLDSW operation of the DTrace machine given a positive number.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	int32_t *var;
+
+	var = malloc(sizeof (int16_t));
+	*var = 7357116;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_RLDSW, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(7357116, estate->dtes_regs[3]);
+
+	free(var);
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_RLDX);
+ATF_TC_BODY(DIF_OP_RLDX, tc)
+{
+	/*
+	 * Test the RLDX operation of the DTrace machine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	uint64_t *var;
+
+	var = malloc(sizeof (uint64_t));
+	*var = 7357116;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_LDX, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(7357116, estate->dtes_regs[3]);
+
+	free(var);
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_RLDUB);
+ATF_TC_BODY(DIF_OP_RLDUB, tc)
+{
+	/*
+	 * Test the RLDUB operation of the DTrace machine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	uint8_t *var;
+
+	var = malloc(sizeof (uint8_t));
+	*var = 73;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_RLDUB, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(73, estate->dtes_regs[3]);
+
+	free(var);
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_RLDUH);
+ATF_TC_BODY(DIF_OP_RLDUH, tc)
+{
+	/*
+	 * Test the RLDUH operation of the DTrace machine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	uint16_t *var;
+
+	var = malloc(sizeof (uint16_t));
+	*var = 7357;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_RLDUH, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(7357, estate->dtes_regs[3]);
+
+	free(var);
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_RLDUW);
+ATF_TC_BODY(DIF_OP_RLDUW, tc)
+{
+	/*
+	 * Test the RLDUW operation of the DTrace machine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	uint32_t *var;
+
+	var = malloc(sizeof (uint32_t));
+	*var = 73571116;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_RLDUW, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(73571116, estate->dtes_regs[3]);
+
+	free(var);
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -2433,6 +2808,16 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_LDUB);
 	ATF_TP_ADD_TC(tp, DIF_OP_LDUH);
 	ATF_TP_ADD_TC(tp, DIF_OP_LDUW);
+	ATF_TP_ADD_TC(tp, DIF_OP_RLDSB_NEG);
+	ATF_TP_ADD_TC(tp, DIF_OP_RLDSB_POS);
+	ATF_TP_ADD_TC(tp, DIF_OP_RLDSH_NEG);
+	ATF_TP_ADD_TC(tp, DIF_OP_RLDSH_POS);
+	ATF_TP_ADD_TC(tp, DIF_OP_RLDSW_NEG);
+	ATF_TP_ADD_TC(tp, DIF_OP_RLDSW_POS);
+	ATF_TP_ADD_TC(tp, DIF_OP_RLDX);
+	ATF_TP_ADD_TC(tp, DIF_OP_RLDUB);
+	ATF_TP_ADD_TC(tp, DIF_OP_RLDUH);
+	ATF_TP_ADD_TC(tp, DIF_OP_RLDUW);
 #endif
 
 	return (atf_no_error());

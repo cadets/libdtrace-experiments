@@ -550,7 +550,7 @@ dtrace_canload(uint64_t addr, size_t sz, dtrace_mstate_t *mstate,
 }
 
 /*
- * Implementation of dtrace_canload which communicates the uppoer bound of the
+ * Implementation of dtrace_canload which communicates the upper bound of the
  * allowed memory region.
  */
 static int
