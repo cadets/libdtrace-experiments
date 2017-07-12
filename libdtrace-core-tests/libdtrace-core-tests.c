@@ -1951,6 +1951,7 @@ ATF_TC_BODY(DIF_OP_LDSB_NEG, tc)
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(0xFFFFFFFFFFFFFFFF, estate->dtes_regs[3]);
 
+	free(var);
 	free(mstate);
 	free(vstate);
 	free(state);
@@ -1987,6 +1988,7 @@ ATF_TC_BODY(DIF_OP_LDSB_POS, tc)
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(73, estate->dtes_regs[3]);
 
+	free(var);
 	free(mstate);
 	free(vstate);
 	free(state);
@@ -2023,6 +2025,7 @@ ATF_TC_BODY(DIF_OP_LDSH_NEG, tc)
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(0xFFFFFFFFFFFFFFFF, estate->dtes_regs[3]);
 
+	free(var);
 	free(mstate);
 	free(vstate);
 	free(state);
@@ -2059,6 +2062,7 @@ ATF_TC_BODY(DIF_OP_LDSH_POS, tc)
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(7357, estate->dtes_regs[3]);
 
+	free(var);
 	free(mstate);
 	free(vstate);
 	free(state);
@@ -2095,6 +2099,7 @@ ATF_TC_BODY(DIF_OP_LDSW_NEG, tc)
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(0xFFFFFFFFFFFFFFFF, estate->dtes_regs[3]);
 
+	free(var);
 	free(mstate);
 	free(vstate);
 	free(state);
@@ -2131,6 +2136,7 @@ ATF_TC_BODY(DIF_OP_LDSW_POS, tc)
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(7357116, estate->dtes_regs[3]);
 
+	free(var);
 	free(mstate);
 	free(vstate);
 	free(state);
@@ -2167,6 +2173,7 @@ ATF_TC_BODY(DIF_OP_LDX, tc)
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(7357116, estate->dtes_regs[3]);
 
+	free(var);
 	free(mstate);
 	free(vstate);
 	free(state);
@@ -2203,6 +2210,7 @@ ATF_TC_BODY(DIF_OP_LDUB, tc)
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(73, estate->dtes_regs[3]);
 
+	free(var);
 	free(mstate);
 	free(vstate);
 	free(state);
@@ -2224,7 +2232,7 @@ ATF_TC_BODY(DIF_OP_LDUH, tc)
 	uint16_t *var;
 
 	var = malloc(sizeof (uint16_t));
-	*var = 73;
+	*var = 7357;
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
 	state = calloc(1, sizeof (dtrace_state_t));
@@ -2237,8 +2245,46 @@ ATF_TC_BODY(DIF_OP_LDUH, tc)
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(73, estate->dtes_regs[3]);
+	ATF_CHECK_EQ(7357, estate->dtes_regs[3]);
 
+	free(var);
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_LDUW);
+ATF_TC_BODY(DIF_OP_LDUW, tc)
+{
+	/*
+	 * Test the LDUW operation of the DTrace machine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	uint32_t *var;
+
+	var = malloc(sizeof (uint32_t));
+	*var = 73571116;
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) var;
+
+	instr = DIF_INSTR_FMT(DIF_OP_LDUW, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(73571116, estate->dtes_regs[3]);
+
+	free(var);
 	free(mstate);
 	free(vstate);
 	free(state);
@@ -2317,6 +2363,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_LDX);
 	ATF_TP_ADD_TC(tp, DIF_OP_LDUB);
 	ATF_TP_ADD_TC(tp, DIF_OP_LDUH);
+	ATF_TP_ADD_TC(tp, DIF_OP_LDUW);
 #endif
 
 	return (atf_no_error());
