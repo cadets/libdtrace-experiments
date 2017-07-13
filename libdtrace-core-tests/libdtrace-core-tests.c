@@ -2947,6 +2947,45 @@ ATF_TC_BODY(DIF_OP_SCMP_FAIL, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_OP_SETX);
+ATF_TC_BODY(DIF_OP_SETX, tc)
+{
+	/*
+	 * Test the SCMP operation of the DTrace machine when the wrong size of
+	 * the string is specified. The expected behaviour here is that the
+	 * string will only be compared partially (i.e., up to a point of
+	 * dts_options[DTRACEOPT_STRSIZE].
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	uint64_t *inttab;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	inttab = calloc(0xFFFF, sizeof(uint64_t));
+	inttab[100] = 0xD06E;
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_inttab = (const uint64_t *) inttab;
+
+	instr = DIF_INSTR_SETX(100, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(0xD06E, estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -3041,6 +3080,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_SCMP_STR1_GT_STR2);
 	ATF_TP_ADD_TC(tp, DIF_OP_SCMP_STR1_LT_STR2);
 	ATF_TP_ADD_TC(tp, DIF_OP_SCMP_FAIL);
+	ATF_TP_ADD_TC(tp, DIF_OP_SETX);
 #endif
 
 	return (atf_no_error());
