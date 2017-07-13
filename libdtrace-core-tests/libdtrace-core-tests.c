@@ -2771,6 +2771,90 @@ ATF_TC_BODY(DIF_OP_RLDUW, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_OP_SCMP_EQ);
+ATF_TC_BODY(DIF_OP_SCMP_EQ, tc)
+{
+	/*
+	 * Test the SCMP operation of the DTrace machine when the two strings
+	 * are equal.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	const char *str1 = "foo";
+	const char *str2 = "foo";
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_options[DTRACEOPT_STRSIZE] = 4;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) str1;
+	estate->dtes_regs[2] = (uintptr_t) str2;
+
+	instr = DIF_INSTR_FMT(DIF_OP_SCMP, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(0, estate->dtes_cc_r);
+	ATF_CHECK_EQ(0, estate->dtes_cc_n);
+	ATF_CHECK_EQ(1, estate->dtes_cc_z);
+	ATF_CHECK_EQ(0, estate->dtes_cc_c);
+	ATF_CHECK_EQ(0, estate->dtes_cc_v);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_OP_SCMP_STR1_GT_STR2);
+ATF_TC_BODY(DIF_OP_SCMP_STR1_GT_STR2, tc)
+{
+	/*
+	 * Test the SCMP operation of the DTrace machine when the two strings
+	 * are equal.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	const char *str1 = "foo";
+	const char *str2 = "eoo";
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = (uintptr_t) str1;
+	estate->dtes_regs[2] = (uintptr_t) str2;
+
+	instr = DIF_INSTR_FMT(DIF_OP_SCMP, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(-1, estate->dtes_cc_r);
+	ATF_CHECK_EQ(1, estate->dtes_cc_n);
+	ATF_CHECK_EQ(0, estate->dtes_cc_z);
+	ATF_CHECK_EQ(0, estate->dtes_cc_c);
+	ATF_CHECK_EQ(0, estate->dtes_cc_v);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -2856,6 +2940,8 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_RLDUB);
 	ATF_TP_ADD_TC(tp, DIF_OP_RLDUH);
 	ATF_TP_ADD_TC(tp, DIF_OP_RLDUW);
+	ATF_TP_ADD_TC(tp, DIF_OP_SCMP_EQ);
+	ATF_TP_ADD_TC(tp, DIF_OP_SCMP_STR1_GT_STR2);
 #endif
 
 	return (atf_no_error());
