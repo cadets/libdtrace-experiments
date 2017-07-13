@@ -2964,6 +2964,11 @@ ATF_TP_ADD_TCS(tp)
 	 * TODO: For all of these tests, we should also add tests for boundary
 	 * conditions, such as hitting the limit of integers, overflowing them,
 	 * expecting them to fail and so on...
+	 *
+	 * XXX: We don't really want to test UDLS* instructions as they are
+	 * no-faulting and there is no concept of "no faulting" in userspace.
+	 * The best that can be done is simulating their successful execution,
+	 * which may or may not be useful in any sense.
 	 */
 	ATF_TP_ADD_TC(tp, DIF_OP_NOP);
 	ATF_TP_ADD_TC(tp, DIF_OP_RET);
