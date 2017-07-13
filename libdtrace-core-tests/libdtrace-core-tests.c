@@ -2792,7 +2792,7 @@ ATF_TC_BODY(DIF_OP_SCMP_EQ, tc)
 	state = calloc(1, sizeof (dtrace_state_t));
 	estate = calloc(1, sizeof (dtrace_estate_t));
 
-	state->dts_options[DTRACEOPT_STRSIZE] = 4;
+	state->dts_options[DTRACEOPT_STRSIZE] = 3;
 
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[1] = (uintptr_t) str1;
@@ -2835,6 +2835,8 @@ ATF_TC_BODY(DIF_OP_SCMP_STR1_GT_STR2, tc)
 	state = calloc(1, sizeof (dtrace_state_t));
 	estate = calloc(1, sizeof (dtrace_estate_t));
 
+	state->dts_options[DTRACEOPT_STRSIZE] = 3;
+
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[1] = (uintptr_t) str1;
 	estate->dtes_regs[2] = (uintptr_t) str2;
@@ -2843,9 +2845,9 @@ ATF_TC_BODY(DIF_OP_SCMP_STR1_GT_STR2, tc)
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(-1, estate->dtes_cc_r);
-	ATF_CHECK_EQ(1, estate->dtes_cc_n);
-	ATF_CHECK_EQ(0, estate->dtes_cc_z);
+	ATF_CHECK_EQ(('f' - 'e'), estate->dtes_cc_r);
+	ATF_CHECK_EQ(('f' - 'e') < 0, estate->dtes_cc_n);
+	ATF_CHECK_EQ(('f' - 'e') == 0, estate->dtes_cc_z);
 	ATF_CHECK_EQ(0, estate->dtes_cc_c);
 	ATF_CHECK_EQ(0, estate->dtes_cc_v);
 
