@@ -7709,7 +7709,7 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 		 */
 		*flags |= CPU_DTRACE_ILLOP;
 #ifdef _DTRACE_TESTS
-			err = EOPNOTSUPP;
+		err = EOPNOTSUPP;
 #endif
 		regs[rd] = 0;
 		break;

@@ -3020,6 +3020,40 @@ ATF_TC_BODY(DIF_OP_SETS, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_OP_LDTA);
+ATF_TC_BODY(DIF_OP_LDTA, tc)
+{
+	/*
+	 * Test the SETS operation of the DTrace machine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+
+	instr = DIF_INSTR_FMT(DIF_OP_LDTA, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	atf_tc_expect_fail("This opcode is currently not implemented"
+	    "and is reserved for future work.");
+
+	ATF_CHECK_EQ(0, err);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -3116,6 +3150,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_SCMP_FAIL);
 	ATF_TP_ADD_TC(tp, DIF_OP_SETX);
 	ATF_TP_ADD_TC(tp, DIF_OP_SETS);
+	ATF_TP_ADD_TC(tp, DIF_OP_LDTA);
 #endif
 
 	return (atf_no_error());
