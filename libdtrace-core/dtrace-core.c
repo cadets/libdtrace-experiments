@@ -773,7 +773,10 @@ dtrace_strcanload(uint64_t addr, size_t sz, size_t *remain,
 	 * If we hold the privilege to read from kernel memory, then
 	 * everything is readable.
 	 */
+#if 0
 	if ((mstate->dtms_access & DTRACE_ACCESS_KERNEL) != 0) {
+#endif
+	if (1) {
 		DTRACE_RANGE_REMAIN(remain, addr, addr, sz);
 		return (1);
 	}
