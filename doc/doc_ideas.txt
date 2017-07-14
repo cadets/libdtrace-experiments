@@ -1,0 +1,10 @@
+Document the following:
+	- Existing test cases and their scope.
+	- How to use kyua
+	- How test cases are named (we should probably have a good definition
+	  for this one).
+	- Supported systems for the test suite (FreeBSD only atm)
+	- Which instructions make no sense to test (ULD*...)
+
+
+
