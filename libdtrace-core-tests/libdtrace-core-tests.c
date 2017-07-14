@@ -3094,6 +3094,10 @@ ATF_TC_BODY(DIF_OP_PUSHTR, tc)
 {
 	/*
 	 * Test the PUSHTR operation of the DTrace machine.
+	 *
+	 * XXX: This is a very bad test due to the fact that we are literally
+	 * pushing it onto the stack and never verifying whether or not it's
+	 * actually been put there.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
