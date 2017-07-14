@@ -3128,6 +3128,55 @@ ATF_TC_BODY(DIF_OP_PUSHTR, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_OP_POPTS);
+ATF_TC_BODY(DIF_OP_POPTS, tc)
+{
+	/*
+	 * Test the POPTS operation of the DTrace machine.
+	 *
+	 * XXX: This is a very bad test due to the fact that we are literally
+	 * pushing it onto the stack and never verifying whether or not it's
+	 * actually been put there.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	char str[] = "hello world!";
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[1] = 0xFF00;
+	estate->dtes_regs[2] = 0;
+	estate->dtes_regs[3] = (uintptr_t) str;
+
+	instr = DIF_INSTR_FMT(DIF_OP_PUSHTR, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+
+	instr = DIF_INSTR_FMT(DIF_OP_POPTS, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+
+	instr = DIF_INSTR_FMT(DIF_OP_POPTS, 1, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -3227,6 +3276,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_LDTA);
 	ATF_TP_ADD_TC(tp, DIF_OP_SRA);
 	ATF_TP_ADD_TC(tp, DIF_OP_PUSHTR);
+	ATF_TP_ADD_TC(tp, DIF_OP_POPTS);
 #endif
 
 	return (atf_no_error());
