@@ -4517,7 +4517,7 @@ dtrace_dif_variable(dtrace_mstate_t *mstate, dtrace_state_t *state, uint64_t v,
 			if (mstate->dtms_probe != NULL)
 				return (val);
 
-			ASSERT(0);
+			assert(0);
 		}
 
 		return (mstate->dtms_arg[ndx]);
@@ -10990,3 +10990,11 @@ dtrace_providers(size_t *sz)
 	*sz = n;
 	return (providers);
 }
+
+#ifdef _DTRACE_TESTS
+dtrace_probe_t *
+dtrace_getprobe(dtrace_id_t id)
+{
+	return (dtrace_probes[id]);
+}
+#endif
