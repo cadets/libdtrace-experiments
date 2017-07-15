@@ -2647,7 +2647,7 @@ ATF_TC_BODY(DIF_OP_RLDX, tc)
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[1] = (uintptr_t) var;
 
-	instr = DIF_INSTR_FMT(DIF_OP_LDX, 1, 2, 3);
+	instr = DIF_INSTR_FMT(DIF_OP_RLDX, 1, 2, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(0, err);
@@ -3024,7 +3024,7 @@ ATF_TC_WITHOUT_HEAD(DIF_OP_LDTA);
 ATF_TC_BODY(DIF_OP_LDTA, tc)
 {
 	/*
-	 * Test the SETS operation of the DTrace machine.
+	 * Test the LDTA operation of the DTrace machine.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;

@@ -1,0 +1,112 @@
+Macro-tests:
+	- dtrace_init()
+	- dtrace_deinit()
+	- dtrace_register()
+	- dtrace_providers()
+	- dtrace_unregister()
+	- dtrace_probe_create()
+	- dtrace_probe_lookup()
+DIF instructions:
+	- DIF_OP_NOP
+	- DIF_OP_RET
+	- DIF_OP_OR
+	- DIF_OP_XOR
+	- DIF_OP_AND
+	- DIF_OP_SLL
+	- DIF_OP_SRL
+	- DIF_OP_SUB
+	- DIF_OP_ADD
+	- DIF_OP_MUL
+	- DIF_OP_SDIV
+	- DIF_OP_UDIV
+	- DIF_OP_SREM
+	- DIF_OP_UREM
+	- DIF_OP_NOT
+	- DIF_OP_MOV
+	- DIF_OP_CMP
+		- r1 is greater than r2
+		- r1 is equal to r2
+		- r1 is lesser than r2
+
+	- DIF_OP_TST
+	- DIF_OP_BA
+	- DIF_OP_BE
+	- DIF_OP_BNE
+	- DIF_OP_BG
+		- successful branch (positive number)
+		- unsuccessful branch (positive number)
+		- successful branch (negative number)
+		- unsuccessful branch (negative number)
+	- DIF_OP_BGU
+		- successful branch
+		- unsuccessful branch
+	- DIF_OP_BGE
+		- successful branch (positive number)
+		- unsuccesful branch (positive number)
+		- successful branch (negative number)
+		- unsuccesful branch (negative number)
+	- DIF_OP_BGEU
+		- successful branch
+		- unsuccesful branch
+	- DIF_OP_BL
+		- successful branch (positive number)
+		- unsuccesful branch (positive number)
+		- successful branch (negative number)
+		- unsuccessful branch (negative number)
+	- DIF_OP_BLU
+		- successful branch
+		- unsuccessful branch
+	- DIF_OP_BLE
+		- successful branch (positive number)
+		- unsuccesful branch (positive number)
+		- successful branch (negative number)
+		- unsuccessful branch (negative number)
+	- DIF_OP_BLEU
+		- successful branch
+		- unsuccessful branch
+	- DIF_OP_LDSB
+		- positive number
+		- negative number
+	- DIF_OP_LDSH
+		- positive number
+		- negative number
+	- DIF_OP_LDSW
+		- positive number
+		- negative number
+	- DIF_OP_LDX
+	- DIF_OP_LDUB
+	- DIF_OP_LDUH
+	- DIF_OP_LDUW
+	- DIF_OP_RLDSB
+		- positive number
+		- negative number
+	- DIF_OP_RLDSH
+		- positive number
+		- negative number
+	- DIF_OP_RLDSW
+		- positive number
+		- negative number
+	- DIF_OP_RLDX
+	- DIF_OP_RLDUB
+	- DIF_OP_RLDUH
+	- DIF_OP_RLDUW
+	- DIF_OP_SCMP
+		- equal strings
+		- first string is greater than second
+		- second string is greater than first
+		- failure to give correct results (length too small)
+	- DIF_OP_SETX
+	- DIF_OP_SETS
+	- DIF_OP_LDTA
+		- doesn't do much -- expects failure!
+	- DIF_OP_SRA
+	- DIF_OP_PUSHTR
+		- not properly tested!
+	- DIF_OP_PUSHTV
+		- not properly tested!
+	- DIF_OP_POPTS
+		- not properly tested!
+	- DIF_OP_FLUSHTS
+		- not properly tested!
+
+
