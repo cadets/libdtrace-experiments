@@ -10423,7 +10423,10 @@ dtrace_register(const char *name, const dtrace_pattr_t *pap, uint32_t priv,
 	provider->dtpv_attr = *pap;
 	provider->dtpv_priv.dtpp_flags = priv;
 	if (cr != NULL) {
-		provider->dtpv_priv.dtpp_uid = crgetuid(cr);
+		/*
+		 * XXX: Does this even make sense...?
+		 */
+		provider->dtpv_priv.dtpp_uid = getuid();
 		provider->dtpv_priv.dtpp_zoneid = crgetzoneid(cr);
 	}
 	provider->dtpv_pops = *pops;
@@ -10890,6 +10893,7 @@ dtrace_toxic_ranges(void (*func)(uintptr_t base, uintptr_t limit))
 static void
 dtrace_toxrange_add(uintptr_t base, uintptr_t limit)
 {
+	/*
 	if (dtrace_toxranges >= dtrace_toxranges_max) {
 		int osize, nsize;
 		dtrace_toxrange_t *range;
@@ -10923,6 +10927,7 @@ dtrace_toxrange_add(uintptr_t base, uintptr_t limit)
 	dtrace_toxrange[dtrace_toxranges].dtt_base = base;
 	dtrace_toxrange[dtrace_toxranges].dtt_limit = limit;
 	dtrace_toxranges++;
+	*/
 }
 
 int
