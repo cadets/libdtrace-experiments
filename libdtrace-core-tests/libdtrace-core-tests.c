@@ -3432,11 +3432,15 @@ ATF_TC_BODY(DIF_VAR_EPID, tc)
 
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[2] = 0;
+	/*
+	 * FIXME: For some reason this stays 0
+	 */
 	estate->dtes_regs[3] = 0;
 
 	instr = DIF_INSTR_FMT(DIF_OP_LDGA, DIF_VAR_EPID, 2, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	ATF_CHECK_EQ(123, mstate->dtms_epid);
 	ATF_CHECK_EQ(123, estate->dtes_regs[3]);
 
 	free(mstate);

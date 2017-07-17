@@ -7637,7 +7637,7 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 		break;
 	}
 	case DIF_OP_LDGA:
-		estate->dtes_regs[rd] = dtrace_dif_variable(mstate, state,
+		regs[rd] = dtrace_dif_variable(mstate, state,
 		    r1, regs[r2]);
 		break;
 	case DIF_OP_LDGS:
