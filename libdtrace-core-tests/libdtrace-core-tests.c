@@ -3329,6 +3329,14 @@ ATF_TC_BODY(DIF_VAR_ARGS, tc)
 
 	ATF_CHECK_EQ(0xD06, estate->dtes_regs[3]);
 
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 6;
+	estate->dtes_regs[3] = 0;
+	mstate->dtms_present &= ~DTRACE_MSTATE_ARGS;
+
+	instr = DIF_INSTR_FMT(DIF_OP_LDGA, DIF_VAR_ARGS, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
 	err = dtrace_unregister(id);
 	ATF_CHECK_EQ(0, err);
 

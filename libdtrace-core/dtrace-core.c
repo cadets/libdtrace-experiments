@@ -53,7 +53,7 @@
 	uint_t actv = _c->cpu_intr_actv; \
 	for (; actv; actv >>= 1) \
 		intr++; \
-	ASSERT(intr < (1 << 3)); \
+	assert(intr < (1 << 3)); \
 	(where) = ((curthread->td_tid + DIF_VARIABLE_MAX) & \
 	    (((uint64_t)1 << 61) - 1)) | ((uint64_t)intr << 61); \
 /*
@@ -1055,7 +1055,7 @@ dtrace_strcpy(const void *src, void *dst, size_t len)
 static void
 dtrace_vcopy(void *src, void *dst, dtrace_diftype_t *type, size_t limit)
 {
-	ASSERT(type->dtdt_flags & DIF_TF_BYREF);
+	assert(type->dtdt_flags & DIF_TF_BYREF);
 
 	if (type->dtdt_kind == DIF_TYPE_STRING) {
 		dtrace_strcpy(src, dst, MIN(type->dtdt_size, limit));
@@ -2665,7 +2665,7 @@ dtrace_priv_proc_common_zone(dtrace_state_t *state)
 	 * We should always have a non-NULL state cred here, since if cred
 	 * is null (anonymous tracing), we fast-path bypass this routine.
 	 */
-	ASSERT(s_cr != NULL);
+	assert(s_cr != NULL);
 
 	if ((cr = CRED()) != NULL && s_cr->cr_zone == cr->cr_zone)
 		return (1);
@@ -2784,16 +2784,16 @@ dtrace_priv_probe(dtrace_state_t *state, dtrace_mstate_t *mstate,
 	dtrace_pops_t *pops = &prov->dtpv_pops;
 	int mode = DTRACE_MODE_NOPRIV_DROP;
 
-	ASSERT(ecb->dte_cond);
+	assert(ecb->dte_cond);
 
 #ifdef illumos
 	if (pops->dtps_mode != NULL) {
 		mode = pops->dtps_mode(prov->dtpv_arg,
 		    probe->dtpr_id, probe->dtpr_arg);
 
-		ASSERT((mode & DTRACE_MODE_USER) ||
+		assert((mode & DTRACE_MODE_USER) ||
 		    (mode & DTRACE_MODE_KERNEL));
-		ASSERT((mode & DTRACE_MODE_NOPRIV_RESTRICT) ||
+		assert((mode & DTRACE_MODE_NOPRIV_RESTRICT) ||
 		    (mode & DTRACE_MODE_NOPRIV_DROP));
 	}
 
@@ -2806,7 +2806,7 @@ dtrace_priv_probe(dtrace_state_t *state, dtrace_mstate_t *mstate,
 	 * operation.
 	 */
 	if (ecb->dte_cond & DTRACE_COND_USERMODE) {
-		ASSERT(mode != DTRACE_MODE_NOPRIV_DROP);
+		assert(mode != DTRACE_MODE_NOPRIV_DROP);
 
 		if (!(mode & DTRACE_MODE_USER)) {
 			if (mode & DTRACE_MODE_NOPRIV_DROP)
@@ -2867,7 +2867,7 @@ dtrace_priv_probe(dtrace_state_t *state, dtrace_mstate_t *mstate,
 		cred_t *cr;
 		cred_t *s_cr = state->dts_cred.dcr_cred;
 
-		ASSERT(s_cr != NULL);
+		assert(s_cr != NULL);
 
 		if ((cr = CRED()) == NULL ||
 		    s_cr->cr_zone->zone_id != cr->cr_zone->zone_id) {
@@ -3006,7 +3006,7 @@ dtrace_dynvar_clean(dtrace_dstate_t *dstate)
 		 * We are now guaranteed that no hash chain contains a pointer
 		 * into this dirty list; we can make it clean.
 		 */
-		ASSERT(dcpu->dtdsc_clean == NULL);
+		assert(dcpu->dtdsc_clean == NULL);
 		dcpu->dtdsc_clean = dcpu->dtdsc_rinsing;
 		dcpu->dtdsc_rinsing = NULL;
 	}
@@ -3048,7 +3048,7 @@ dtrace_dynvar(dtrace_dstate_t *dstate, uint_t nkeys,
 	uintptr_t kdata, lock, nstate;
 	uint_t i;
 
-	ASSERT(nkeys != 0);
+	assert(nkeys != 0);
 
 	/*
 	 * Hash the key.  As with aggregations, we use Jenkins' "One-at-a-time"
@@ -3147,7 +3147,7 @@ top:
 	dtrace_membar_consumer();
 
 	start = hash[bucket].dtdh_chain;
-	ASSERT(start != NULL && (start->dtdv_hashval == DTRACE_DYNHASH_SINK ||
+	assert(start != NULL && (start->dtdv_hashval == DTRACE_DYNHASH_SINK ||
 	    start->dtdv_hashval != DTRACE_DYNHASH_FREE ||
 	    op != DTRACE_DYNVAR_DEALLOC));
 
@@ -3163,8 +3163,8 @@ top:
 				 * the loop knowing that we have seen a valid
 				 * snapshot of state.
 				 */
-				ASSERT(dvar->dtdv_next == NULL);
-				ASSERT(dvar == &dtrace_dynhash_sink);
+				assert(dvar->dtdv_next == NULL);
+				assert(dvar == &dtrace_dynhash_sink);
 				break;
 			}
 
@@ -3213,13 +3213,13 @@ top:
 		if (op != DTRACE_DYNVAR_DEALLOC)
 			return (dvar);
 
-		ASSERT(dvar->dtdv_next == NULL ||
+		assert(dvar->dtdv_next == NULL ||
 		    dvar->dtdv_next->dtdv_hashval != DTRACE_DYNHASH_FREE);
 
 		if (prev != NULL) {
-			ASSERT(hash[bucket].dtdh_chain != dvar);
-			ASSERT(start != dvar);
-			ASSERT(prev->dtdv_next == dvar);
+			assert(hash[bucket].dtdh_chain != dvar);
+			assert(start != dvar);
+			assert(prev->dtdv_next == dvar);
 			prev->dtdv_next = dvar->dtdv_next;
 		} else {
 			if (dtrace_casptr(&hash[bucket].dtdh_chain,
@@ -3240,7 +3240,7 @@ top:
 		/*
 		 * Now set the hash value to indicate that it's free.
 		 */
-		ASSERT(hash[bucket].dtdh_chain != dvar);
+		assert(hash[bucket].dtdh_chain != dvar);
 		dvar->dtdv_hashval = DTRACE_DYNHASH_FREE;
 
 		dtrace_membar_producer();
@@ -3257,8 +3257,8 @@ top:
 		/*
 		 * Finally, unlock this hash bucket.
 		 */
-		ASSERT(hash[bucket].dtdh_lock == lock);
-		ASSERT(lock & 1);
+		assert(hash[bucket].dtdh_lock == lock);
+		assert(lock & 1);
 		hash[bucket].dtdh_lock++;
 
 		return (NULL);
@@ -3276,7 +3276,7 @@ next:
 		 * the hash bucket to prevent themselves from racing with
 		 * one another), and retry the hash chain traversal.
 		 */
-		ASSERT(op != DTRACE_DYNVAR_DEALLOC);
+		assert(op != DTRACE_DYNVAR_DEALLOC);
 		goto top;
 	}
 
@@ -3291,9 +3291,9 @@ next:
 			if (hash[bucket].dtdh_lock != lock)
 				goto top;
 		} else {
-			ASSERT(op == DTRACE_DYNVAR_DEALLOC);
-			ASSERT(hash[bucket].dtdh_lock == lock);
-			ASSERT(lock & 1);
+			assert(op == DTRACE_DYNVAR_DEALLOC);
+			assert(hash[bucket].dtdh_lock == lock);
+			assert(lock & 1);
 			hash[bucket].dtdh_lock++;
 		}
 
@@ -3411,7 +3411,7 @@ retry:
 				goto retry;
 			}
 
-			ASSERT(clean->dtdv_hashval == DTRACE_DYNHASH_FREE);
+			assert(clean->dtdv_hashval == DTRACE_DYNHASH_FREE);
 
 			/*
 			 * Now we'll move the clean list to our free list.
@@ -3429,7 +3429,7 @@ retry:
 			 */
 			dcpu = &dstate->dtds_percpu[me];
 			rval = dtrace_casptr(&dcpu->dtdsc_free, NULL, clean);
-			ASSERT(rval == NULL);
+			assert(rval == NULL);
 			goto retry;
 		}
 
@@ -3464,7 +3464,7 @@ retry:
 		dkey->dttk_size = kesize;
 	}
 
-	ASSERT(dvar->dtdv_hashval == DTRACE_DYNHASH_FREE);
+	assert(dvar->dtdv_hashval == DTRACE_DYNHASH_FREE);
 	dvar->dtdv_hashval = hashval;
 	dvar->dtdv_next = start;
 
@@ -4212,7 +4212,7 @@ dtrace_speculation_discard(dtrace_state_t *state, processorid_t cpu,
 			break;
 
 		default:
-			ASSERT(0);
+			assert(0);
 		}
 	} while (dtrace_cas32((uint32_t *)&spec->dtsp_state,
 	    current, new) != current);
@@ -4286,7 +4286,7 @@ dtrace_speculation_clean(dtrace_state_t *state)
 	for (i = 0; i < state->dts_nspeculations; i++) {
 		dtrace_speculation_t *spec = &state->dts_speculations[i];
 
-		ASSERT(!spec->dtsp_cleaning);
+		assert(!spec->dtsp_cleaning);
 
 		if (spec->dtsp_state != DTRACESPEC_DISCARDING &&
 		    spec->dtsp_state != DTRACESPEC_COMMITTINGMANY)
@@ -4312,13 +4312,13 @@ dtrace_speculation_clean(dtrace_state_t *state)
 			continue;
 
 		current = spec->dtsp_state;
-		ASSERT(current == DTRACESPEC_DISCARDING ||
+		assert(current == DTRACESPEC_DISCARDING ||
 		    current == DTRACESPEC_COMMITTINGMANY);
 
 		new = DTRACESPEC_INACTIVE;
 
 		rv = dtrace_cas32((uint32_t *)&spec->dtsp_state, current, new);
-		ASSERT(rv == current);
+		assert(rv == current);
 		spec->dtsp_cleaning = 0;
 	}
 }
@@ -4500,7 +4500,7 @@ dtrace_dif_variable(dtrace_mstate_t *mstate, dtrace_state_t *state, uint64_t v,
 
 	switch (v) {
 	case DIF_VAR_ARGS:
-		ASSERT(mstate->dtms_present & DTRACE_MSTATE_ARGS);
+		assert(mstate->dtms_present & DTRACE_MSTATE_ARGS);
 		if (ndx >= sizeof (mstate->dtms_arg) /
 		    sizeof (mstate->dtms_arg[0])) {
 			int aframes = mstate->dtms_probe->dtpr_aframes + 2;
@@ -4611,11 +4611,11 @@ dtrace_dif_variable(dtrace_mstate_t *mstate, dtrace_state_t *state, uint64_t v,
 #endif
 
 	case DIF_VAR_EPID:
-		ASSERT(mstate->dtms_present & DTRACE_MSTATE_EPID);
+		assert(mstate->dtms_present & DTRACE_MSTATE_EPID);
 		return (mstate->dtms_epid);
 
 	case DIF_VAR_ID:
-		ASSERT(mstate->dtms_present & DTRACE_MSTATE_PROBE);
+		assert(mstate->dtms_present & DTRACE_MSTATE_PROBE);
 		return (mstate->dtms_probe->dtpr_id);
 
 	case DIF_VAR_STACKDEPTH:
@@ -4715,25 +4715,25 @@ dtrace_dif_variable(dtrace_mstate_t *mstate, dtrace_state_t *state, uint64_t v,
 		return (mstate->dtms_ucaller);
 
 	case DIF_VAR_PROBEPROV:
-		ASSERT(mstate->dtms_present & DTRACE_MSTATE_PROBE);
+		assert(mstate->dtms_present & DTRACE_MSTATE_PROBE);
 		return (dtrace_dif_varstr(
 		    (uintptr_t)mstate->dtms_probe->dtpr_provider->dtpv_name,
 		    state, mstate));
 
 	case DIF_VAR_PROBEMOD:
-		ASSERT(mstate->dtms_present & DTRACE_MSTATE_PROBE);
+		assert(mstate->dtms_present & DTRACE_MSTATE_PROBE);
 		return (dtrace_dif_varstr(
 		    (uintptr_t)mstate->dtms_probe->dtpr_mod,
 		    state, mstate));
 
 	case DIF_VAR_PROBEFUNC:
-		ASSERT(mstate->dtms_present & DTRACE_MSTATE_PROBE);
+		assert(mstate->dtms_present & DTRACE_MSTATE_PROBE);
 		return (dtrace_dif_varstr(
 		    (uintptr_t)mstate->dtms_probe->dtpr_func,
 		    state, mstate));
 
 	case DIF_VAR_PROBENAME:
-		ASSERT(mstate->dtms_present & DTRACE_MSTATE_PROBE);
+		assert(mstate->dtms_present & DTRACE_MSTATE_PROBE);
 		return (dtrace_dif_varstr(
 		    (uintptr_t)mstate->dtms_probe->dtpr_name,
 		    state, mstate));
@@ -6085,7 +6085,7 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 					break;
 				}
 
-				ASSERT(subr == DIF_SUBR_STRSTR);
+				assert(subr == DIF_SUBR_STRSTR);
 				regs[rd] = (uintptr_t)addr;
 				break;
 			}
@@ -6159,7 +6159,7 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 			if ((c = dtrace_load8(tokaddr)) == '\0')
 				break;
 
-			ASSERT((c >> 3) < sizeof (tokmap));
+			assert((c >> 3) < sizeof (tokmap));
 			tokmap[c >> 3] |= (1 << (c & 0x7));
 		}
 
@@ -6198,11 +6198,11 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 			if (tokmap[c >> 3] & (1 << (c & 0x7)))
 				break;
 
-			ASSERT(i < size);
+			assert(i < size);
 			dest[i++] = c;
 		}
 
-		ASSERT(i < size);
+		assert(i < size);
 		dest[i] = '\0';
 		regs[rd] = (uintptr_t)dest;
 		mstate->dtms_scratch_ptr += size;
@@ -6362,7 +6362,7 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 			dest[i] = c;
 		}
 
-		ASSERT(i < size);
+		assert(i < size);
 		dest[i] = '\0';
 		regs[rd] = (uintptr_t)dest;
 		mstate->dtms_scratch_ptr += size;
@@ -6803,8 +6803,8 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 		if (i >= 0)
 			lastdir = i;
 
-		ASSERT(!(lastbase == -1 && firstbase != -1));
-		ASSERT(!(firstbase == -1 && lastdir != -1));
+		assert(!(lastbase == -1 && firstbase != -1));
+		assert(!(firstbase == -1 && lastdir != -1));
 
 		if (lastbase == -1) {
 			/*
@@ -6813,7 +6813,7 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 			 * slashes.  In either the dirname or the basename
 			 * case, we return '/'.
 			 */
-			ASSERT(firstbase == -1);
+			assert(firstbase == -1);
 			firstbase = lastbase = lastdir = 0;
 		}
 
@@ -6826,7 +6826,7 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 			 * character of the basename to be 0.
 			 */
 			if (subr == DIF_SUBR_DIRNAME) {
-				ASSERT(lastdir == -1);
+				assert(lastdir == -1);
 				src = (uintptr_t)".";
 				lastdir = 0;
 			} else {
@@ -6851,8 +6851,8 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 			start = 0;
 			end = lastdir;
 		} else {
-			ASSERT(subr == DIF_SUBR_BASENAME);
-			ASSERT(firstbase != -1 && lastbase != -1);
+			assert(subr == DIF_SUBR_BASENAME);
+			assert(firstbase != -1 && lastbase != -1);
 			start = firstbase;
 			end = lastbase;
 		}
@@ -8274,7 +8274,7 @@ dtrace_store_by_ref(dtrace_difo_t *dp, caddr_t tomax, size_t size,
 	size_t valoffs = *valoffsp;
 
 	flags = (volatile uint16_t *)&cpuc_dtrace_flags;
-	ASSERT(dtkind == DIF_TF_BYREF || dtkind == DIF_TF_BYUREF);
+	assert(dtkind == DIF_TF_BYREF || dtkind == DIF_TF_BYUREF);
 
 	/*
 	 * If this is a string, we're going to only load until we find the zero
@@ -10896,8 +10896,8 @@ dtrace_toxrange_add(uintptr_t base, uintptr_t limit)
 		osize = dtrace_toxranges_max * sizeof (dtrace_toxrange_t);
 
 		if (osize == 0) {
-			ASSERT(dtrace_toxrange == NULL);
-			ASSERT(dtrace_toxranges_max == 0);
+			assert(dtrace_toxrange == NULL);
+			assert(dtrace_toxranges_max == 0);
 			dtrace_toxranges_max = 1;
 		} else {
 			dtrace_toxranges_max <<= 1;
@@ -10908,7 +10908,7 @@ dtrace_toxrange_add(uintptr_t base, uintptr_t limit)
 		assert(range != NULL);
 
 		if (dtrace_toxrange != NULL) {
-			ASSERT(osize != 0);
+			assert(osize != 0);
 			bcopy(dtrace_toxrange, range, osize);
 			free(dtrace_toxrange);
 		}
@@ -10916,8 +10916,8 @@ dtrace_toxrange_add(uintptr_t base, uintptr_t limit)
 		dtrace_toxrange = range;
 	}
 
-	ASSERT(dtrace_toxrange[dtrace_toxranges].dtt_base == 0);
-	ASSERT(dtrace_toxrange[dtrace_toxranges].dtt_limit == 0);
+	assert(dtrace_toxrange[dtrace_toxranges].dtt_base == 0);
+	assert(dtrace_toxrange[dtrace_toxranges].dtt_limit == 0);
 
 	dtrace_toxrange[dtrace_toxranges].dtt_base = base;
 	dtrace_toxrange[dtrace_toxranges].dtt_limit = limit;
