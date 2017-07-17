@@ -3435,13 +3435,79 @@ ATF_TC_BODY(DIF_VAR_EPID, tc)
 	/*
 	 * FIXME: For some reason this stays 0
 	 */
-	estate->dtes_regs[3] = 0;
+	estate->dtes_regs[3] = 88;
 
 	instr = DIF_INSTR_FMT(DIF_OP_LDGA, DIF_VAR_EPID, 2, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(123, mstate->dtms_epid);
+	atf_tc_fail("estate->dtes_regs[3] = %lu\n", estate->dtes_regs[3]);
 	ATF_CHECK_EQ(123, estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_VAR_ID);
+ATF_TC_BODY(DIF_VAR_ID, tc)
+{
+	/*
+	 * Test the ID variable access with a failed assertion.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	err = dtrace_init();
+	if (err != 0)
+		atf_tc_fail("DTrace not properly initialized: %s", strerror(err));
+
+
+	err = dtrace_register("test_provider", &test_provider_attr,
+	    DTRACE_PRIV_NONE, 0, &test_provider_ops, NULL, &id);
+	ATF_CHECK_EQ(0, err);
+
+	provider = (dtrace_provider_t *) id;
+	probeid = dtrace_probe_create(id, "test", "probe",
+	    "foo", 0, NULL);
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 0;
+	estate->dtes_regs[3] = 0;
+
+	mstate->dtms_probe = dtrace_getprobe(probeid);
+	ATF_CHECK_EQ(mstate->dtms_probe->dtpr_id, probeid);
+	ATF_CHECK_EQ(mstate->dtms_probe->dtpr_provider, provider);
+	mstate->dtms_present |= DTRACE_MSTATE_PROBE;
+
+	instr = DIF_INSTR_FMT(DIF_OP_LDGA, DIF_VAR_ID, 2, 3);
+	atf_tc_fail("%u\n", DIF_INSTR_OP(instr));
+	atf_tc_fail("%u\n", DIF_INSTR_R1(instr));
+	atf_tc_fail("%u\n", DIF_INSTR_R2(instr));
+	atf_tc_fail("%u\n", DIF_INSTR_RD(instr));
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(probeid, estate->dtes_regs[3]);
+
+	err = dtrace_unregister(id);
+	ATF_CHECK_EQ(0, err);
+
+	err = dtrace_deinit();
+	if (err)
+		atf_tc_fail("DTrace not properly deinitialized: %s", strerror(err));
 
 	free(mstate);
 	free(vstate);
@@ -3554,6 +3620,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_VAR_ARGS);
 	ATF_TP_ADD_TC(tp, DIF_VAR_ARGS_ASSERT_FAIL);
 	ATF_TP_ADD_TC(tp, DIF_VAR_EPID);
+	ATF_TP_ADD_TC(tp, DIF_VAR_ID);
 #endif
 
 	return (atf_no_error());
