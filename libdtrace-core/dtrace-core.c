@@ -260,6 +260,7 @@ static int		dtrace_dynvar_failclean; /* dynvars failed to clean */
 static dtrace_toxrange_t *dtrace_toxrange;	/* toxic range array */
 static int		dtrace_toxranges;	/* number of toxic ranges */
 static int		dtrace_toxranges_max;	/* size of toxic range array */
+static dtrace_dynvar_t	dtrace_dynhash_sink;	/* end of dynamic hash chains */
 /*
  * FIXME: This is so not necessary.
  */
