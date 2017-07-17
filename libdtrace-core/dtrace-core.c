@@ -348,6 +348,16 @@ dtrace_membar_producer(void)
 {}
 
 /*
+ * TODO: How do we make DTrace get registers if we are in userspace? Do we just
+ * let the process itself execute that when it traps?
+ */
+ulong_t
+dtrace_getreg(struct trapframe *rp, uint_t reg)
+{
+	return (0);
+}
+
+/*
  * Return a duplicate copy of a string.  If the specified string is NULL,
  * this function returns a zero-length string.
  */
@@ -7626,7 +7636,7 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 		break;
 	}
 	case DIF_OP_LDGA:
-		regs[rd] = dtrace_dif_variable(mstate, state,
+		estate->dtes_regs[rd] = dtrace_dif_variable(mstate, state,
 		    r1, regs[r2]);
 		break;
 	case DIF_OP_LDGS:
@@ -10995,6 +11005,6 @@ dtrace_providers(size_t *sz)
 dtrace_probe_t *
 dtrace_getprobe(dtrace_id_t id)
 {
-	return (dtrace_probes[id]);
+	return (dtrace_probes[id - 1]);
 }
 #endif

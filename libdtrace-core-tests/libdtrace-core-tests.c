@@ -3263,7 +3263,7 @@ static uint64_t
 test_getargval(void *arg, dtrace_id_t id, void *parg,
     int argno, int aframes)
 {
-	return (*((uint64_t *) arg));
+	return (*((uint64_t *) parg));
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_VAR_ARGS);
@@ -3311,13 +3311,13 @@ ATF_TC_BODY(DIF_VAR_ARGS, tc)
 	ATF_CHECK_EQ(mstate->dtms_probe->dtpr_id, probeid);
 	ATF_CHECK_EQ(mstate->dtms_probe->dtpr_provider, provider);
 	mstate->dtms_probe->dtpr_arg = &testval;
+	mstate->dtms_present |= DTRACE_MSTATE_ARGS;
 	mstate->dtms_arg[0] = 0xD06E;
 
 	instr = DIF_INSTR_FMT(DIF_OP_LDGA, DIF_VAR_ARGS, 2, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(0, err);
-	//atf_tc_fail("regs[3] = %lx\n", estate->dtes_regs[3]);
 	ATF_CHECK_EQ(0xD06E, estate->dtes_regs[3]);
 
 	estate->dtes_regs[DIF_REG_R0] = 0;
@@ -3327,7 +3327,6 @@ ATF_TC_BODY(DIF_VAR_ARGS, tc)
 	instr = DIF_INSTR_FMT(DIF_OP_LDGA, DIF_VAR_ARGS, 2, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
-	atf_tc_fail("regs[3] = %lx\n", estate->dtes_regs[3]);
 	ATF_CHECK_EQ(0xD06, estate->dtes_regs[3]);
 
 	err = dtrace_unregister(id);
@@ -3336,6 +3335,43 @@ ATF_TC_BODY(DIF_VAR_ARGS, tc)
 	err = dtrace_deinit();
 	if (err)
 		atf_tc_fail("DTrace not properly deinitialized: %s", strerror(err));
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_VAR_EPID);
+ATF_TC_BODY(DIF_VAR_EPID, tc)
+{
+	/*
+	 * Test the EPID variable access.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	int err;
+	uint64_t testval = 0xD06;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	mstate->dtms_present |= DTRACE_MSTATE_EPID;
+	mstate->dtms_epid = 123;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 0;
+	estate->dtes_regs[3] = 0;
+
+	instr = DIF_INSTR_FMT(DIF_OP_LDGA, DIF_VAR_EPID, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(123, estate->dtes_regs[3]);
 
 	free(mstate);
 	free(vstate);
@@ -3446,6 +3482,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_OP_POPTS);
 	ATF_TP_ADD_TC(tp, DIF_OP_FLUSHTS);
 	ATF_TP_ADD_TC(tp, DIF_VAR_ARGS);
+	ATF_TP_ADD_TC(tp, DIF_VAR_EPID);
 #endif
 
 	return (atf_no_error());
