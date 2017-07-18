@@ -3432,16 +3432,13 @@ ATF_TC_BODY(DIF_VAR_EPID, tc)
 
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[2] = 0;
-	/*
-	 * FIXME: For some reason this stays 0
-	 */
 	estate->dtes_regs[3] = 88;
 
-	instr = DIF_INSTR_FMT(DIF_OP_LDGA, DIF_VAR_EPID, 2, 3);
+
+	instr = DIF_INSTR_LDV(DIF_OP_LDGS, DIF_VAR_EPID, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(123, mstate->dtms_epid);
-	atf_tc_fail("estate->dtes_regs[3] = %lu\n", estate->dtes_regs[3]);
 	ATF_CHECK_EQ(123, estate->dtes_regs[3]);
 
 	free(mstate);
@@ -3493,7 +3490,7 @@ ATF_TC_BODY(DIF_VAR_ID, tc)
 	ATF_CHECK_EQ(mstate->dtms_probe->dtpr_provider, provider);
 	mstate->dtms_present |= DTRACE_MSTATE_PROBE;
 
-	instr = DIF_INSTR_FMT(DIF_OP_LDGA, DIF_VAR_ID, 2, 3);
+	instr = DIF_INSTR_FMT(DIF_OP_LDGS, DIF_VAR_ID, 2, 3);
 	atf_tc_fail("%u\n", DIF_INSTR_OP(instr));
 	atf_tc_fail("%u\n", DIF_INSTR_R1(instr));
 	atf_tc_fail("%u\n", DIF_INSTR_R2(instr));
