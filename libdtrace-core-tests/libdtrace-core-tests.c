@@ -3490,11 +3490,7 @@ ATF_TC_BODY(DIF_VAR_ID, tc)
 	ATF_CHECK_EQ(mstate->dtms_probe->dtpr_provider, provider);
 	mstate->dtms_present |= DTRACE_MSTATE_PROBE;
 
-	instr = DIF_INSTR_FMT(DIF_OP_LDGS, DIF_VAR_ID, 2, 3);
-	atf_tc_fail("%u\n", DIF_INSTR_OP(instr));
-	atf_tc_fail("%u\n", DIF_INSTR_R1(instr));
-	atf_tc_fail("%u\n", DIF_INSTR_R2(instr));
-	atf_tc_fail("%u\n", DIF_INSTR_RD(instr));
+	instr = DIF_INSTR_LDV(DIF_OP_LDGS, DIF_VAR_ID, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(probeid, estate->dtes_regs[3]);
