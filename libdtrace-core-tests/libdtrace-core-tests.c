@@ -3519,7 +3519,9 @@ ATF_TC_BODY(DIF_VAR_PROBEPROV, tc)
 	dtrace_state_t *state;
 	dtrace_estate_t *estate;
 	dif_instr_t instr;
+	dtrace_id_t probeid;
 	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
 	int err;
 
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
@@ -3531,19 +3533,29 @@ ATF_TC_BODY(DIF_VAR_PROBEPROV, tc)
 	if (err != 0)
 		atf_tc_fail("DTrace not properly initialized: %s", strerror(err));
 
-
 	err = dtrace_register("test_provider", &test_provider_attr,
 	    DTRACE_PRIV_NONE, 0, &test_provider_ops, NULL, &id);
 	ATF_CHECK_EQ(0, err);
 
+	provider = (dtrace_provider_t *) id;
+	probeid = dtrace_probe_create(id, "test", "probe",
+	    "foo", 0, NULL);
+
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[2] = 0;
 	estate->dtes_regs[3] = 0;
+
+	mstate->dtms_probe = dtrace_getprobe(probeid);
+	ATF_CHECK_EQ(mstate->dtms_probe->dtpr_id, probeid);
+	ATF_CHECK_EQ(mstate->dtms_probe->dtpr_provider, provider);
 	mstate->dtms_present |= DTRACE_MSTATE_PROBE;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
 
 	instr = DIF_INSTR_LDV(DIF_OP_LDGS, DIF_VAR_PROBEPROV, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK(0 != estate->dtes_regs[3]);
 	ATF_CHECK_STREQ("test_provider", (char *)estate->dtes_regs[3]);
 
 	err = dtrace_unregister(id);
