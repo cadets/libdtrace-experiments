@@ -3799,6 +3799,45 @@ ATF_TC_BODY(DIF_VAR_PID, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_VAR_PPID);
+ATF_TC_BODY(DIF_VAR_PPID, tc)
+{
+	/*
+	 * Test the PPID variable access.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_cred.dcr_action |= DTRACE_CRA_PROC;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 0;
+	estate->dtes_regs[3] = 0;
+
+	instr = DIF_INSTR_LDV(DIF_OP_LDGS, DIF_VAR_PPID, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(getppid(), estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -3910,6 +3949,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_VAR_PROBEFUNC);
 	ATF_TP_ADD_TC(tp, DIF_VAR_PROBENAME);
 	ATF_TP_ADD_TC(tp, DIF_VAR_PID);
+	ATF_TP_ADD_TC(tp, DIF_VAR_PPID);
 #endif
 
 	return (atf_no_error());
