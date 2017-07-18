@@ -3432,7 +3432,7 @@ ATF_TC_BODY(DIF_VAR_EPID, tc)
 
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[2] = 0;
-	estate->dtes_regs[3] = 88;
+	estate->dtes_regs[3] = 0;
 
 
 	instr = DIF_INSTR_LDV(DIF_OP_LDGS, DIF_VAR_EPID, 3);
@@ -3451,7 +3451,7 @@ ATF_TC_WITHOUT_HEAD(DIF_VAR_ID);
 ATF_TC_BODY(DIF_VAR_ID, tc)
 {
 	/*
-	 * Test the ID variable access with a failed assertion.
+	 * Test the ID variable access.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -3494,6 +3494,57 @@ ATF_TC_BODY(DIF_VAR_ID, tc)
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(probeid, estate->dtes_regs[3]);
+
+	err = dtrace_unregister(id);
+	ATF_CHECK_EQ(0, err);
+
+	err = dtrace_deinit();
+	if (err)
+		atf_tc_fail("DTrace not properly deinitialized: %s", strerror(err));
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_VAR_PROBEPROV);
+ATF_TC_BODY(DIF_VAR_PROBEPROV, tc)
+{
+	/*
+	 * Test the PROBEPROV variable access.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_provider_id_t id;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	err = dtrace_init();
+	if (err != 0)
+		atf_tc_fail("DTrace not properly initialized: %s", strerror(err));
+
+
+	err = dtrace_register("test_provider", &test_provider_attr,
+	    DTRACE_PRIV_NONE, 0, &test_provider_ops, NULL, &id);
+	ATF_CHECK_EQ(0, err);
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 0;
+	estate->dtes_regs[3] = 0;
+	mstate->dtms_present |= DTRACE_MSTATE_PROBE;
+
+	instr = DIF_INSTR_LDV(DIF_OP_LDGS, DIF_VAR_PROBEPROV, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_STREQ("test_provider", (char *)estate->dtes_regs[3]);
 
 	err = dtrace_unregister(id);
 	ATF_CHECK_EQ(0, err);
@@ -3614,6 +3665,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_VAR_ARGS_ASSERT_FAIL);
 	ATF_TP_ADD_TC(tp, DIF_VAR_EPID);
 	ATF_TP_ADD_TC(tp, DIF_VAR_ID);
+	ATF_TP_ADD_TC(tp, DIF_VAR_PROBEPROV);
 #endif
 
 	return (atf_no_error());
