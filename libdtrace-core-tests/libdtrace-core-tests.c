@@ -3928,6 +3928,50 @@ ATF_TC_BODY(DIF_VAR_EXECNAME, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_VAR_ZONENAME);
+ATF_TC_BODY(DIF_VAR_ZONENAME, tc)
+{
+	/*
+	 * Test the ZONENAME variable access.
+	 *
+	 * This doesn't even work on FreeBSD, let alone in userspace, but the
+	 * test is here just for future additions to DTrace.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_cred.dcr_action |= DTRACE_CRA_PROC;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 0;
+	estate->dtes_regs[3] = 0;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
+
+	instr = DIF_INSTR_LDV(DIF_OP_LDGS, DIF_VAR_ZONENAME, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	atf_tc_expect_fail("ZONENAME is not implemented.");
+	ATF_CHECK(estate->dtes_regs[3] != 0);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -4042,6 +4086,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_VAR_PPID);
 	ATF_TP_ADD_TC(tp, DIF_VAR_TID);
 	ATF_TP_ADD_TC(tp, DIF_VAR_EXECNAME);
+	ATF_TP_ADD_TC(tp, DIF_VAR_ZONENAME);
 #endif
 
 	return (atf_no_error());
