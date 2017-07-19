@@ -3972,6 +3972,48 @@ ATF_TC_BODY(DIF_VAR_ZONENAME, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_VAR_UID);
+ATF_TC_BODY(DIF_VAR_UID, tc)
+{
+	/*
+	 * Test the UID variable access.
+	 *
+	 * XXX: This also can't be tested properly because we are just getting
+	 * our own UID.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_cred.dcr_action |= DTRACE_CRA_PROC;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 0;
+	estate->dtes_regs[3] = 0;
+
+	instr = DIF_INSTR_LDV(DIF_OP_LDGS, DIF_VAR_UID, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(getuid(), estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -4087,6 +4129,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_VAR_TID);
 	ATF_TP_ADD_TC(tp, DIF_VAR_EXECNAME);
 	ATF_TP_ADD_TC(tp, DIF_VAR_ZONENAME);
+	ATF_TP_ADD_TC(tp, DIF_VAR_UID);
 #endif
 
 	return (atf_no_error());
