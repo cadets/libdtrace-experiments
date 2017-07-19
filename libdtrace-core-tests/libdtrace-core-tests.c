@@ -3838,6 +3838,96 @@ ATF_TC_BODY(DIF_VAR_PPID, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_VAR_TID);
+ATF_TC_BODY(DIF_VAR_TID, tc)
+{
+	/*
+	 * Test the TID variable access.
+	 *
+	 * XXX: This can't be tested properly as we are running only on one
+	 * thread. This should be addressed in the future, perhaps through SMP
+	 * emulation or a different architecture all together...
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_cred.dcr_action |= DTRACE_CRA_PROC;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 0;
+	estate->dtes_regs[3] = 0;
+
+	instr = DIF_INSTR_LDV(DIF_OP_LDGS, DIF_VAR_TID, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(1, estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_VAR_EXECNAME);
+ATF_TC_BODY(DIF_VAR_EXECNAME, tc)
+{
+	/*
+	 * Test the EXECNAME variable access.
+	 *
+	 * XXX: This can't be tested properly because we don't have access to
+	 * the process' execname, we don't own the traced process.
+	 *
+	 * Temporarily, we use setprogname() and getprogname()
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_cred.dcr_action |= DTRACE_CRA_PROC;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 0;
+	estate->dtes_regs[3] = 0;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
+
+	setprogname("Test Program");
+
+	instr = DIF_INSTR_LDV(DIF_OP_LDGS, DIF_VAR_EXECNAME, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_STREQ("Test Program", (char *)estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -3950,6 +4040,8 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_VAR_PROBENAME);
 	ATF_TP_ADD_TC(tp, DIF_VAR_PID);
 	ATF_TP_ADD_TC(tp, DIF_VAR_PPID);
+	ATF_TP_ADD_TC(tp, DIF_VAR_TID);
+	ATF_TP_ADD_TC(tp, DIF_VAR_EXECNAME);
 #endif
 
 	return (atf_no_error());
