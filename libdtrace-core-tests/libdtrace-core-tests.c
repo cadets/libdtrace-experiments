@@ -2798,6 +2798,7 @@ ATF_TC_BODY(DIF_OP_SCMP_EQ, tc)
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[1] = (uintptr_t) str1;
 	estate->dtes_regs[2] = (uintptr_t) str2;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
 
 	instr = DIF_INSTR_FMT(DIF_OP_SCMP, 1, 2, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
@@ -2842,6 +2843,7 @@ ATF_TC_BODY(DIF_OP_SCMP_STR1_GT_STR2, tc)
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[1] = (uintptr_t) str1;
 	estate->dtes_regs[2] = (uintptr_t) str2;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
 
 	instr = DIF_INSTR_FMT(DIF_OP_SCMP, 1, 2, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
@@ -2886,6 +2888,7 @@ ATF_TC_BODY(DIF_OP_SCMP_STR1_LT_STR2, tc)
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[1] = (uintptr_t) str1;
 	estate->dtes_regs[2] = (uintptr_t) str2;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
 
 	instr = DIF_INSTR_FMT(DIF_OP_SCMP, 1, 2, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
@@ -2931,6 +2934,7 @@ ATF_TC_BODY(DIF_OP_SCMP_FAIL, tc)
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[1] = (uintptr_t) str1;
 	estate->dtes_regs[2] = (uintptr_t) str2;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
 
 	instr = DIF_INSTR_FMT(DIF_OP_SCMP, 1, 2, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
