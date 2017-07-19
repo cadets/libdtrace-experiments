@@ -4134,6 +4134,50 @@ ATF_TC_BODY(DIF_VAR_UNKNOWN, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRLEN_EXPECTED);
+ATF_TC_BODY(DIF_SUBR_STRLEN_EXPECTED, tc)
+{
+	/*
+	 * Test variable access given an unknown variable.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+	const char *string = "hello there test case";
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 0;
+	estate->dtes_regs[3] = &string;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 0, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_STRLEN, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(strlen(string), estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -4253,6 +4297,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_VAR_GID);
 	ATF_TP_ADD_TC(tp, DIF_VAR_ERRNO);
 	ATF_TP_ADD_TC(tp, DIF_VAR_UNKNOWN);
+	ATF_TP_ADD_TC(tp, DIF_SUBR_STRLEN_EXPECTED);
 #endif
 
 	return (atf_no_error());
