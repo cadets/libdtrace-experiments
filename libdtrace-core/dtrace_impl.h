@@ -909,6 +909,7 @@ typedef struct dtrace_vstate {
  * itself.
  */
 typedef struct dtrace_estate {
+	dtrace_key_t dtes_tupregs[DIF_DTR_NREGS + 2]; /* nregs + thread + id */
 	uint64_t dtes_regs[DIF_DIR_NREGS];
 	const uint64_t *dtes_inttab;
 	const char *dtes_strtab;
@@ -920,6 +921,7 @@ typedef struct dtrace_estate {
 	uint8_t dtes_cc_n;
 	uint8_t dtes_cc_v;
 	uint8_t dtes_cc_z;
+	uint8_t dtes_ttop;
 } dtrace_estate_t;
 
 /*

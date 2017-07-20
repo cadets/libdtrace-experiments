@@ -7372,8 +7372,8 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 	dtrace_dstate_t *dstate = &vstate->dtvs_dynvars;
 	volatile uint16_t *flags = &cpuc_dtrace_flags;
 	volatile uintptr_t *illval = &cpuc_dtrace_illval;
-	dtrace_key_t tupregs[DIF_DTR_NREGS + 2]; /* +2 for thread and id */
-	uint8_t ttop = 0;
+	dtrace_key_t *tupregs;
+	uint8_t ttop;
 	uint64_t rval;
 	uint64_t textlen;
 	const uint64_t *inttab = estate->dtes_inttab;
@@ -7401,6 +7401,9 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 	pc = estate->dtes_pc;
 	rval = estate->dtes_rval;
 	textlen = estate->dtes_textlen;
+
+	tupregs = estate->dtes_tupregs;
+	ttop = estate->dtes_ttop;
 
 	/*
 	 * Emulate the actual instructions
@@ -7968,6 +7971,7 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 			    dtrace_strlen((char *)(uintptr_t)regs[rd],
 			    regs[r2] ? regs[r2] :
 			    dtrace_strsize_default) + 1;
+			assert(tupregs[ttop].dttk_size != 0);
 		} else {
 			if (regs[r2] > LONG_MAX) {
 				*flags |= CPU_DTRACE_ILLOP;
@@ -8233,6 +8237,7 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 	estate->dtes_cc_z = cc_z;
 	estate->dtes_cc_v = cc_v;
 	estate->dtes_cc_c = cc_c;
+	estate->dtes_ttop = ttop;
 
 #ifdef _DTRACE_TESTS
 	return (err);
