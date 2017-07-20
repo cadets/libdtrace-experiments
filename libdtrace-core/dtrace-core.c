@@ -7971,7 +7971,6 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 			    dtrace_strlen((char *)(uintptr_t)regs[rd],
 			    regs[r2] ? regs[r2] :
 			    dtrace_strsize_default) + 1;
-			assert(tupregs[ttop].dttk_size != 0);
 		} else {
 			if (regs[r2] > LONG_MAX) {
 				*flags |= CPU_DTRACE_ILLOP;
