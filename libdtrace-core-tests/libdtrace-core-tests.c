@@ -4233,6 +4233,108 @@ ATF_TC_BODY(DIF_SUBR_STRLEN_NULL, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRLEN_NOT_TERMINATED);
+ATF_TC_BODY(DIF_SUBR_STRLEN_NOT_TERMINATED, tc)
+{
+	/*
+	 * Test the strlen() subroutine given a non-null terminated string as an
+	 * input to the function.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+	char *string = malloc(4);
+	strncpy(string, "testiuwhaufiwehfewhdiewuihfeiwhidhewfuewhdiehfiwae", 200);
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_options[DTRACEOPT_STRSIZE] = 100;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 100;
+	estate->dtes_regs[3] = (uint64_t) string;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(1, estate->dtes_ttop);
+	ATF_CHECK_STREQ("test", (char *)estate->dtes_tupregs[0].dttk_value);
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_STRLEN, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	atf_tc_expect_fail("It is unbounded, DTrace keeps reading to DTRACEOPT_STRSIZE, length is: %zu", estate->dtes_regs[3]);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(4, estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRLEN_TOO_LONG);
+ATF_TC_BODY(DIF_SUBR_STRLEN_TOO_LONG, tc)
+{
+	/*
+	 * Test the strlen() subroutine given a string that's too long.
+	 *
+	 * Expected output is the DTRACEOPT_STRSIZE boundary.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+	char *string = malloc(300);
+	strncpy(string, "testiuwhaufiwehfewhdiewuihfeiwhidhewfuewhdiehfiwaehiufewhiufewuuwhiuewfieduiwehfiuwehdihweifhwehdieuwhfiewdiwuehfiwehfuewi", 300);
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_options[DTRACEOPT_STRSIZE] = 100;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 100;
+	estate->dtes_regs[3] = (uint64_t) string;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(1, estate->dtes_ttop);
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_STRLEN, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(100, estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -4354,6 +4456,8 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_VAR_UNKNOWN);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_STRLEN_EXPECTED);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_STRLEN_NULL);
+	ATF_TP_ADD_TC(tp, DIF_SUBR_STRLEN_NOT_TERMINATED);
+	ATF_TP_ADD_TC(tp, DIF_SUBR_STRLEN_TOO_LONG);
 #endif
 
 	return (atf_no_error());
