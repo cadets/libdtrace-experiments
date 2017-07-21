@@ -17,5 +17,6 @@ junit:
 report:
 	kyua report
 
-fuzz:
+fuzz!
 	afl-fuzz -i libdtrace-core-fuzz/${FUZZ}/in -o libdtrace-core-fuzz/${FUZZ}/out libdtrace-core-fuzz/${FUZZ}/${FUZZ}
+
