@@ -18,4 +18,4 @@ report:
 	kyua report
 
 fuzz:
-	afl-fuzz -i libdtrace-core-fuzz/in/${FUZZ} -o libdtrace-core-fuzz/out libdtrace-core-fuzz/${FUZZ}
+	afl-fuzz -i libdtrace-core-fuzz/${FUZZ}/in -o libdtrace-core-fuzz/${FUZZ}/out libdtrace-core-fuzz/${FUZZ}/${FUZZ}
