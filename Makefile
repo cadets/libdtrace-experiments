@@ -1,6 +1,7 @@
-SUBDIR=	libdtrace-core libdtrace-core-tests
+SUBDIR=	libdtrace-core libdtrace-core-tests libdtrace-core-fuzz
 
 TEST=
+FUZZ=
 
 .include <bsd.subdir.mk>
 
@@ -15,3 +16,6 @@ junit:
 
 report:
 	kyua report
+
+fuzz:
+	LD_LIBRARY_PATH=${.OBJDIR}/libdtrace-core afl-fuzz -i libdtrace-core-fuzz/in/${FUZZ} -o libdtrace-core-fuzz/out libdtrace-core-fuzz/${FUZZ}
