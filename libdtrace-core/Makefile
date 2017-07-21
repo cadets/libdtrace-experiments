@@ -1,3 +1,4 @@
+CC=	afl-clang
 LIB=		dtrace-core
 SHLIB_MAJOR=	0
 
