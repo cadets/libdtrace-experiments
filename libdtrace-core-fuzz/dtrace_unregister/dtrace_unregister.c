@@ -3,8 +3,8 @@
 #include <string.h>
 #include <errno.h>
 
-#include "../libdtrace-core/dtrace.h"
-#include "../libdtrace-core/dtrace_impl.h"
+#include "../../libdtrace-core/dtrace.h"
+#include "../../libdtrace-core/dtrace_impl.h"
 
 static void dtrace_nullop() {}
 
