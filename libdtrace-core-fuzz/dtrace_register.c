@@ -15,7 +15,6 @@ static dtrace_pops_t pops = {
 (void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
 (void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
 (void (*)(void *, dtrace_id_t, void *, dtrace_argdesc_t *))dtrace_nullop,
-/*(uint64_t (*)(void *, dtrace_id_t, void *, int, int))dtrace_nullop,*/
 NULL,
 (int (*)(void *, dtrace_id_t, void *))dtrace_nullop,
 (void (*)(void *, dtrace_id_t, void *))dtrace_nullop
@@ -40,6 +39,7 @@ main(void)
 	cred_t *cr;
 
 	fgets(provname, DTRACE_PROVNAMELEN, stdin);
+	provname[strcspn(provname, "\n")] = 0;
 	scanf("%u", &priv);
 
 	cr = NULL;

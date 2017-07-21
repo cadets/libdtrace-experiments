@@ -18,4 +18,4 @@ report:
 	kyua report
 
 fuzz:
-	LD_LIBRARY_PATH=${.OBJDIR}/libdtrace-core afl-fuzz -i libdtrace-core-fuzz/in/${FUZZ} -o libdtrace-core-fuzz/out libdtrace-core-fuzz/${FUZZ}
+	afl-fuzz -i libdtrace-core-fuzz/in/${FUZZ} -o libdtrace-core-fuzz/out libdtrace-core-fuzz/${FUZZ}
