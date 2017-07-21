@@ -4,7 +4,7 @@ CC=	afl-clang
 
 CFLAGS+=	-I/usr/local/include
 
-CLEANFILES+=	out/
+CLEANDIRS+=	out/
 
 LDADD=	-ldtrace-core
 LDFLAGS+=	-v
