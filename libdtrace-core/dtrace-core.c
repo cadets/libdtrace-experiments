@@ -102,6 +102,15 @@ dtrace_load##bits(uintptr_t addr)					\
 	return (rval);							\
 }
 
+#define DTRACE_FUWORD(bits)						\
+uint##bits##_t								\
+dtrace_fuword##bits(void *addr)					\
+{									\
+	uint##bits##_t rval;						\
+	rval = *((volatile uint##bits##_t *)addr);			\
+	return (rval);							\
+}
+
 /*
  * This function is very specific to the kernel. Though it might do some things
  * we are interested in, for now, we will just set the value.
@@ -345,18 +354,20 @@ dtrace_vtime_disable(void)
 {}
 
 void
-dtrace_membar_producer(void)
+dtrace_getpcstack(pc_t *pc, int a, int b, uint32_t *c)
 {}
 
-/*
- * TODO: How do we make DTrace get registers if we are in userspace? Do we just
- * let the process itself execute that when it traps?
- */
-ulong_t
-dtrace_getreg(struct trapframe *rp, uint_t reg)
-{
-	return (0);
-}
+void dtrace_copyin(uintptr_t a, uintptr_t c, size_t b, volatile uint16_t *d) {}
+void dtrace_copyinstr(uintptr_t a, uintptr_t b, size_t c, volatile uint16_t *d) {}
+void dtrace_copyout(uintptr_t a, uintptr_t b, size_t c, volatile uint16_t *d) {}
+void dtrace_copyoutstr(uintptr_t a, uintptr_t b, size_t c,
+    volatile uint16_t *d) {}
+ulong_t dtrace_getreg(struct trapframe *tf, uint_t a) { return a; }
+int dtrace_getstackdepth(int a) { return a; }
+void dtrace_getupcstack(uint64_t *a, int b) {}
+void dtrace_getufpstack(uint64_t *a, uint64_t *b, int c) {}
+int dtrace_getustackdepth(void) { return 0; }
+uint64_t __noinline dtrace_getarg(int a, int b) { return a; }
 
 /*
  * Return a duplicate copy of a string.  If the specified string is NULL,
@@ -382,7 +393,24 @@ DTRACE_LOADFUNC(8)
 DTRACE_LOADFUNC(16)
 DTRACE_LOADFUNC(32)
 DTRACE_LOADFUNC(64)
+
+DTRACE_FUWORD(8)
+DTRACE_FUWORD(16)
+DTRACE_FUWORD(32)
+DTRACE_FUWORD(64)
 /* END CSTYLED */
+
+int
+dtrace_assfail(const char *a, const char *f, int l)
+{
+	abort();
+
+	/*
+	 * We just need something here that even the most clever compiler
+	 * cannot optimize away.
+	 */
+	return (a[(uintptr_t)f]);
+}
 
 static int
 dtrace_inscratch(uintptr_t dest, size_t size, dtrace_mstate_t *mstate)
@@ -11009,6 +11037,23 @@ dtrace_providers(size_t *sz)
 	*sz = n;
 	return (providers);
 }
+
+void
+dtrace_probe_error(dtrace_state_t *state, dtrace_epid_t epid, int which,
+    int fault, int fltoffs, uintptr_t illval)
+{
+
+	dtrace_probe(dtrace_probeid_error, (uint64_t)(uintptr_t)state,
+	    (uintptr_t)epid,
+	    (uintptr_t)which, (uintptr_t)fault, (uintptr_t)fltoffs);
+}
+
+void
+dtrace_copystr(uintptr_t uaddr, uintptr_t kaddr, size_t size,
+    volatile uint16_t *flags __unused)
+{
+}
+
 
 #ifdef _DTRACE_TESTS
 dtrace_probe_t *
