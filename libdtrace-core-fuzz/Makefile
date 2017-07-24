@@ -1,4 +1,4 @@
-SUBDIR=	dtrace_register dtrace_unregister dtrace_probe_create
+SUBDIR=	init
 
 .include <bsd.subdir.mk>
 

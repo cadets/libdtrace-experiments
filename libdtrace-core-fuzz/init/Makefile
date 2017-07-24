@@ -1,4 +1,4 @@
-PROG=	dtrace_probe_create
+PROG=	init
 
 CC=	afl-clang
 
