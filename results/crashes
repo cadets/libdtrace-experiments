@@ -1,0 +1,62 @@
+(1):
+	- STGS, VERIFY(id < vstate->dtvs_nglobals)
+	- Not verified to affect real DTrace
+
+(2):
+	- LDGS, svar = vstate->dtvs_globals[id]
+	- segfault, not verified to affect real DTrace
+
+(3):
+	- LDX, dtrace_load64() -> likely covered by toxic ranges
+
+(4):
+	- STLS, VERIFY(...)
+
+(5)
+	- LDUB, probably doesn't affect DTrace due to toxic ranges.
+
+(6)
+	- STTS, VERIFY(...)
+
+(7)
+	- LDSH, dtrace_load(), toxic ranges.
+
+(8)
+	- bucket = hashval % dstate->dtds_hashsize
+	- this needs to be checked a bit better.
+	- dtrace_dynvar().
+
+(9)
+	- LDUW, toxic ranges probably cover it.
+
+(10)
+	- LDUH, toxic ranges probably cover it.
+
+(11)
+	- LDSW, toxic ranges probably cover it.
+
+(12)
+	- SETX, integer table is not set, but this shouldn't try and access it
+	  then...?
+
+(13)
+	- LDLS, assert same as VERIFY(...)
+
+(14)
+	- MSTATE is not in args. makes sense to crash.
+
+(15)
+	- dtrace_strlen() -> should be covered by toxranges.
+
+(16)
+	- LDST, assertion. id >= DIF_VAR_OTHER_UBASE
+	- probably shouldn't outright panic? maybe?
+
+(17)
+	- STTS, same thing
+
+(18)
+	- STGS, same thing
+
+(19)
+	- STLS, same thing
