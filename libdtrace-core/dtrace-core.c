@@ -106,8 +106,9 @@ dtrace_load##bits(uintptr_t addr)					\
 uint##bits##_t								\
 dtrace_fuword##bits(void *addr)					\
 {									\
-	uint##bits##_t rval;						\
-	rval = *((volatile uint##bits##_t *)addr);			\
+	uint##bits##_t rval = 0;					\
+	if (addr)							\
+		rval = *((volatile uint##bits##_t *)addr);		\
 	return (rval);							\
 }
 
