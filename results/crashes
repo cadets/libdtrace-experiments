@@ -60,3 +60,26 @@
 
 (19)
 	- STLS, same thing
+
+(20)
+	- DIF_SUBR_CLEANPATH -> dest[j] = '\0' -> segfault!
+	- dtms_scratch_ptr
+
+(21)
+	- DIF_SUBR_SUBSTR
+	- dtms_scratch_ptr, also segfault
+
+(22)
+	- DIF_SUBR_MEMREF
+	- memref[1] = tupregs[1].dttk_value
+	- segfault
+
+(23)
+	- DIF_SUBR_BASENAME
+	- probably mitigated by toxic ranges??
+	- segfault dest[j] = dtrace_load8(src + i);
+
+(24)
+	- DIF_SUBR_COPYINSTR
+	- dtms_scratch_ptr
+	- also segfault.
