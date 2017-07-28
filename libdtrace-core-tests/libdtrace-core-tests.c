@@ -4186,6 +4186,81 @@ ATF_TC_BODY(DIF_SUBR_STRLEN_EXPECTED, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_SUBR_BCOPY);
+ATF_TC_BODY(DIF_SUBR_BCOPY, tc)
+{
+	/*
+	 * Test the bcopy() subroutine.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+	const char *string = "hello";
+	char *dst;
+	size_t string_len;
+
+	string_len = strlen(string);
+	dst = malloc(string_len);
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	mstate->dtms_scratch_base = 0;
+	mstate->dtms_scratch_ptr = 100000000000000;
+
+	state->dts_options[DTRACEOPT_STRSIZE] = string_len;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = string_len;
+	estate->dtes_regs[3] = (uint64_t) string;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(1, estate->dtes_ttop);
+
+	estate->dtes_regs[3] = (uint64_t) dst;
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(2, estate->dtes_ttop);
+
+	estate->dtes_regs[2] = sizeof(size_t);
+	/*
+	 * strlen + 1 because we want to copy '\0'
+	 */
+	estate->dtes_regs[3] = string_len + 1;
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, 0, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(3, estate->dtes_ttop);
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_BCOPY, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(string_len, strlen(dst));
+	ATF_CHECK_STREQ(string, dst);
+
+	free(dst);
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRLEN_NULL);
 ATF_TC_BODY(DIF_SUBR_STRLEN_NULL, tc)
 {
@@ -4671,6 +4746,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_VAR_GID);
 	ATF_TP_ADD_TC(tp, DIF_VAR_ERRNO);
 	ATF_TP_ADD_TC(tp, DIF_VAR_UNKNOWN);
+	ATF_TP_ADD_TC(tp, DIF_SUBR_BCOPY);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_STRLEN_EXPECTED);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_STRLEN_NULL);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_STRLEN_NOT_TERMINATED);
