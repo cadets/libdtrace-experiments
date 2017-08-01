@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <errno.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -272,6 +273,7 @@ static dtrace_toxrange_t *dtrace_toxrange;	/* toxic range array */
 static int		dtrace_toxranges;	/* number of toxic ranges */
 static int		dtrace_toxranges_max;	/* size of toxic range array */
 static dtrace_dynvar_t	dtrace_dynhash_sink;	/* end of dynamic hash chains */
+int		dtrace_err_verbose;
 /*
  * FIXME: This is so not necessary.
  */
@@ -8242,6 +8244,482 @@ dtrace_emul_instruction(dif_instr_t instr, dtrace_estate_t *estate,
 #ifdef _DTRACE_TESTS
 	return (err);
 #endif
+}
+
+/*
+ * DTrace DIF Object Functions
+ */
+static int
+dtrace_difo_err(uint_t pc, const char *format, ...)
+{
+	if (dtrace_err_verbose) {
+		va_list alist;
+
+		(void) printf("dtrace DIF object error: [%u]: ", pc);
+		va_start(alist, format);
+		(void) vprintf(format, alist);
+		va_end(alist);
+	}
+
+#ifdef DTRACE_ERRDEBUG
+	dtrace_errdebug(format);
+#endif
+	return (1);
+}
+
+/*
+ * Validate a DTrace DIF object by checking the IR instructions.  The following
+ * rules are currently enforced by dtrace_difo_validate():
+ *
+ * 1. Each instruction must have a valid opcode
+ * 2. Each register, string, variable, or subroutine reference must be valid
+ * 3. No instruction can modify register %r0 (must be zero)
+ * 4. All instruction reserved bits must be set to zero
+ * 5. The last instruction must be a "ret" instruction
+ * 6. All branch targets must reference a valid instruction _after_ the branch
+ */
+static int
+dtrace_difo_validate(dtrace_difo_t *dp, dtrace_vstate_t *vstate, uint_t nregs,
+    cred_t *cr)
+{
+	int err = 0, i;
+	int (*efunc)(uint_t pc, const char *, ...) = dtrace_difo_err;
+	int kcheckload;
+	uint_t pc;
+	int maxglobal = -1, maxlocal = -1, maxtlocal = -1;
+
+	kcheckload = cr == NULL ||
+	    (vstate->dtvs_state->dts_cred.dcr_visible & DTRACE_CRV_KERNEL) == 0;
+
+	dp->dtdo_destructive = 0;
+
+	for (pc = 0; pc < dp->dtdo_len && err == 0; pc++) {
+		dif_instr_t instr = dp->dtdo_buf[pc];
+
+		uint_t r1 = DIF_INSTR_R1(instr);
+		uint_t r2 = DIF_INSTR_R2(instr);
+		uint_t rd = DIF_INSTR_RD(instr);
+		uint_t rs = DIF_INSTR_RS(instr);
+		uint_t label = DIF_INSTR_LABEL(instr);
+		uint_t v = DIF_INSTR_VAR(instr);
+		uint_t subr = DIF_INSTR_SUBR(instr);
+		uint_t type = DIF_INSTR_TYPE(instr);
+		uint_t op = DIF_INSTR_OP(instr);
+
+		switch (op) {
+		case DIF_OP_OR:
+		case DIF_OP_XOR:
+		case DIF_OP_AND:
+		case DIF_OP_SLL:
+		case DIF_OP_SRL:
+		case DIF_OP_SRA:
+		case DIF_OP_SUB:
+		case DIF_OP_ADD:
+		case DIF_OP_MUL:
+		case DIF_OP_SDIV:
+		case DIF_OP_UDIV:
+		case DIF_OP_SREM:
+		case DIF_OP_UREM:
+		case DIF_OP_COPYS:
+			if (r1 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r1);
+			if (r2 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r2);
+			if (rd >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			if (rd == 0)
+				err += efunc(pc, "cannot write to %r0\n");
+			break;
+		case DIF_OP_NOT:
+		case DIF_OP_MOV:
+		case DIF_OP_ALLOCS:
+			if (r1 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r1);
+			if (r2 != 0)
+				err += efunc(pc, "non-zero reserved bits\n");
+			if (rd >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			if (rd == 0)
+				err += efunc(pc, "cannot write to %r0\n");
+			break;
+		case DIF_OP_LDSB:
+		case DIF_OP_LDSH:
+		case DIF_OP_LDSW:
+		case DIF_OP_LDUB:
+		case DIF_OP_LDUH:
+		case DIF_OP_LDUW:
+		case DIF_OP_LDX:
+			if (r1 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r1);
+			if (r2 != 0)
+				err += efunc(pc, "non-zero reserved bits\n");
+			if (rd >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			if (rd == 0)
+				err += efunc(pc, "cannot write to %r0\n");
+			if (kcheckload)
+				dp->dtdo_buf[pc] = DIF_INSTR_LOAD(op +
+				    DIF_OP_RLDSB - DIF_OP_LDSB, r1, rd);
+			break;
+		case DIF_OP_RLDSB:
+		case DIF_OP_RLDSH:
+		case DIF_OP_RLDSW:
+		case DIF_OP_RLDUB:
+		case DIF_OP_RLDUH:
+		case DIF_OP_RLDUW:
+		case DIF_OP_RLDX:
+			if (r1 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r1);
+			if (r2 != 0)
+				err += efunc(pc, "non-zero reserved bits\n");
+			if (rd >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			if (rd == 0)
+				err += efunc(pc, "cannot write to %r0\n");
+			break;
+		case DIF_OP_ULDSB:
+		case DIF_OP_ULDSH:
+		case DIF_OP_ULDSW:
+		case DIF_OP_ULDUB:
+		case DIF_OP_ULDUH:
+		case DIF_OP_ULDUW:
+		case DIF_OP_ULDX:
+			if (r1 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r1);
+			if (r2 != 0)
+				err += efunc(pc, "non-zero reserved bits\n");
+			if (rd >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			if (rd == 0)
+				err += efunc(pc, "cannot write to %r0\n");
+			break;
+		case DIF_OP_STB:
+		case DIF_OP_STH:
+		case DIF_OP_STW:
+		case DIF_OP_STX:
+			if (r1 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r1);
+			if (r2 != 0)
+				err += efunc(pc, "non-zero reserved bits\n");
+			if (rd >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			if (rd == 0)
+				err += efunc(pc, "cannot write to 0 address\n");
+			break;
+		case DIF_OP_CMP:
+		case DIF_OP_SCMP:
+			if (r1 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r1);
+			if (r2 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r2);
+			if (rd != 0)
+				err += efunc(pc, "non-zero reserved bits\n");
+			break;
+		case DIF_OP_TST:
+			if (r1 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r1);
+			if (r2 != 0 || rd != 0)
+				err += efunc(pc, "non-zero reserved bits\n");
+			break;
+		case DIF_OP_BA:
+		case DIF_OP_BE:
+		case DIF_OP_BNE:
+		case DIF_OP_BG:
+		case DIF_OP_BGU:
+		case DIF_OP_BGE:
+		case DIF_OP_BGEU:
+		case DIF_OP_BL:
+		case DIF_OP_BLU:
+		case DIF_OP_BLE:
+		case DIF_OP_BLEU:
+			if (label >= dp->dtdo_len) {
+				err += efunc(pc, "invalid branch target %u\n",
+				    label);
+			}
+			if (label <= pc) {
+				err += efunc(pc, "backward branch to %u\n",
+				    label);
+			}
+			break;
+		case DIF_OP_RET:
+			if (r1 != 0 || r2 != 0)
+				err += efunc(pc, "non-zero reserved bits\n");
+			if (rd >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			break;
+		case DIF_OP_NOP:
+		case DIF_OP_POPTS:
+		case DIF_OP_FLUSHTS:
+			if (r1 != 0 || r2 != 0 || rd != 0)
+				err += efunc(pc, "non-zero reserved bits\n");
+			break;
+		case DIF_OP_SETX:
+			if (DIF_INSTR_INTEGER(instr) >= dp->dtdo_intlen) {
+				err += efunc(pc, "invalid integer ref %u\n",
+				    DIF_INSTR_INTEGER(instr));
+			}
+			if (rd >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			if (rd == 0)
+				err += efunc(pc, "cannot write to %r0\n");
+			break;
+		case DIF_OP_SETS:
+			if (DIF_INSTR_STRING(instr) >= dp->dtdo_strlen) {
+				err += efunc(pc, "invalid string ref %u\n",
+				    DIF_INSTR_STRING(instr));
+			}
+			if (rd >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			if (rd == 0)
+				err += efunc(pc, "cannot write to %r0\n");
+			break;
+		case DIF_OP_LDGA:
+		case DIF_OP_LDTA:
+			if (r1 > DIF_VAR_ARRAY_MAX)
+				err += efunc(pc, "invalid array %u\n", r1);
+			if (r2 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r2);
+			if (rd >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			if (rd == 0)
+				err += efunc(pc, "cannot write to %r0\n");
+			break;
+		case DIF_OP_LDGS:
+		case DIF_OP_LDTS:
+		case DIF_OP_LDLS:
+		case DIF_OP_LDGAA:
+		case DIF_OP_LDTAA:
+			if (v < DIF_VAR_OTHER_MIN || v > DIF_VAR_OTHER_MAX)
+				err += efunc(pc, "invalid variable %u\n", v);
+			if (rd >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			if (rd == 0)
+				err += efunc(pc, "cannot write to %r0\n");
+			break;
+		case DIF_OP_STGS:
+		case DIF_OP_STTS:
+		case DIF_OP_STLS:
+		case DIF_OP_STGAA:
+		case DIF_OP_STTAA:
+			if (v < DIF_VAR_OTHER_UBASE || v > DIF_VAR_OTHER_MAX)
+				err += efunc(pc, "invalid variable %u\n", v);
+			if (rs >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			break;
+		case DIF_OP_CALL:
+			if (subr > DIF_SUBR_MAX)
+				err += efunc(pc, "invalid subr %u\n", subr);
+			if (rd >= nregs)
+				err += efunc(pc, "invalid register %u\n", rd);
+			if (rd == 0)
+				err += efunc(pc, "cannot write to %r0\n");
+
+			if (subr == DIF_SUBR_COPYOUT ||
+			    subr == DIF_SUBR_COPYOUTSTR) {
+				dp->dtdo_destructive = 1;
+			}
+
+			if (subr == DIF_SUBR_GETF) {
+				/*
+				 * If we have a getf() we need to record that
+				 * in our state.  Note that our state can be
+				 * NULL if this is a helper -- but in that
+				 * case, the call to getf() is itself illegal,
+				 * and will be caught (slightly later) when
+				 * the helper is validated.
+				 */
+				if (vstate->dtvs_state != NULL)
+					vstate->dtvs_state->dts_getf++;
+			}
+
+			break;
+		case DIF_OP_PUSHTR:
+			if (type != DIF_TYPE_STRING && type != DIF_TYPE_CTF)
+				err += efunc(pc, "invalid ref type %u\n", type);
+			if (r2 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r2);
+			if (rs >= nregs)
+				err += efunc(pc, "invalid register %u\n", rs);
+			break;
+		case DIF_OP_PUSHTV:
+			if (type != DIF_TYPE_CTF)
+				err += efunc(pc, "invalid val type %u\n", type);
+			if (r2 >= nregs)
+				err += efunc(pc, "invalid register %u\n", r2);
+			if (rs >= nregs)
+				err += efunc(pc, "invalid register %u\n", rs);
+			break;
+		default:
+			err += efunc(pc, "invalid opcode %u\n",
+			    DIF_INSTR_OP(instr));
+		}
+	}
+
+	if (dp->dtdo_len != 0 &&
+	    DIF_INSTR_OP(dp->dtdo_buf[dp->dtdo_len - 1]) != DIF_OP_RET) {
+		err += efunc(dp->dtdo_len - 1,
+		    "expected 'ret' as last DIF instruction\n");
+	}
+
+	if (!(dp->dtdo_rtype.dtdt_flags & (DIF_TF_BYREF | DIF_TF_BYUREF))) {
+		/*
+		 * If we're not returning by reference, the size must be either
+		 * 0 or the size of one of the base types.
+		 */
+		switch (dp->dtdo_rtype.dtdt_size) {
+		case 0:
+		case sizeof (uint8_t):
+		case sizeof (uint16_t):
+		case sizeof (uint32_t):
+		case sizeof (uint64_t):
+			break;
+
+		default:
+			err += efunc(dp->dtdo_len - 1, "bad return size\n");
+		}
+	}
+
+	for (i = 0; i < dp->dtdo_varlen && err == 0; i++) {
+		dtrace_difv_t *v = &dp->dtdo_vartab[i], *existing = NULL;
+		dtrace_diftype_t *vt, *et;
+		uint_t id, ndx;
+
+		if (v->dtdv_scope != DIFV_SCOPE_GLOBAL &&
+		    v->dtdv_scope != DIFV_SCOPE_THREAD &&
+		    v->dtdv_scope != DIFV_SCOPE_LOCAL) {
+			err += efunc(i, "unrecognized variable scope %d\n",
+			    v->dtdv_scope);
+			break;
+		}
+
+		if (v->dtdv_kind != DIFV_KIND_ARRAY &&
+		    v->dtdv_kind != DIFV_KIND_SCALAR) {
+			err += efunc(i, "unrecognized variable type %d\n",
+			    v->dtdv_kind);
+			break;
+		}
+
+		if ((id = v->dtdv_id) > DIF_VARIABLE_MAX) {
+			err += efunc(i, "%d exceeds variable id limit\n", id);
+			break;
+		}
+
+		if (id < DIF_VAR_OTHER_UBASE)
+			continue;
+
+		/*
+		 * For user-defined variables, we need to check that this
+		 * definition is identical to any previous definition that we
+		 * encountered.
+		 */
+		ndx = id - DIF_VAR_OTHER_UBASE;
+
+		switch (v->dtdv_scope) {
+		case DIFV_SCOPE_GLOBAL:
+			if (maxglobal == -1 || ndx > maxglobal)
+				maxglobal = ndx;
+
+			if (ndx < vstate->dtvs_nglobals) {
+				dtrace_statvar_t *svar;
+
+				if ((svar = vstate->dtvs_globals[ndx]) != NULL)
+					existing = &svar->dtsv_var;
+			}
+
+			break;
+
+		case DIFV_SCOPE_THREAD:
+			if (maxtlocal == -1 || ndx > maxtlocal)
+				maxtlocal = ndx;
+
+			if (ndx < vstate->dtvs_ntlocals)
+				existing = &vstate->dtvs_tlocals[ndx];
+			break;
+
+		case DIFV_SCOPE_LOCAL:
+			if (maxlocal == -1 || ndx > maxlocal)
+				maxlocal = ndx;
+
+			if (ndx < vstate->dtvs_nlocals) {
+				dtrace_statvar_t *svar;
+
+				if ((svar = vstate->dtvs_locals[ndx]) != NULL)
+					existing = &svar->dtsv_var;
+			}
+
+			break;
+		}
+
+		vt = &v->dtdv_type;
+
+		if (vt->dtdt_flags & DIF_TF_BYREF) {
+			if (vt->dtdt_size == 0) {
+				err += efunc(i, "zero-sized variable\n");
+				break;
+			}
+
+			if ((v->dtdv_scope == DIFV_SCOPE_GLOBAL ||
+			    v->dtdv_scope == DIFV_SCOPE_LOCAL) &&
+			    vt->dtdt_size > dtrace_statvar_maxsize) {
+				err += efunc(i, "oversized by-ref static\n");
+				break;
+			}
+		}
+
+		if (existing == NULL || existing->dtdv_id == 0)
+			continue;
+
+		ASSERT(existing->dtdv_id == v->dtdv_id);
+		ASSERT(existing->dtdv_scope == v->dtdv_scope);
+
+		if (existing->dtdv_kind != v->dtdv_kind)
+			err += efunc(i, "%d changed variable kind\n", id);
+
+		et = &existing->dtdv_type;
+
+		if (vt->dtdt_flags != et->dtdt_flags) {
+			err += efunc(i, "%d changed variable type flags\n", id);
+			break;
+		}
+
+		if (vt->dtdt_size != 0 && vt->dtdt_size != et->dtdt_size) {
+			err += efunc(i, "%d changed variable type size\n", id);
+			break;
+		}
+	}
+
+	for (pc = 0; pc < dp->dtdo_len && err == 0; pc++) {
+		dif_instr_t instr = dp->dtdo_buf[pc];
+
+		uint_t v = DIF_INSTR_VAR(instr);
+		uint_t op = DIF_INSTR_OP(instr);
+
+		switch (op) {
+		case DIF_OP_LDGS:
+		case DIF_OP_LDGAA:
+		case DIF_OP_STGS:
+		case DIF_OP_STGAA:
+			if (v > DIF_VAR_OTHER_UBASE + maxglobal)
+				err += efunc(pc, "invalid variable %u\n", v);
+			break;
+		case DIF_OP_LDTS:
+		case DIF_OP_LDTAA:
+		case DIF_OP_STTS:
+		case DIF_OP_STTAA:
+			if (v > DIF_VAR_OTHER_UBASE + maxtlocal)
+				err += efunc(pc, "invalid variable %u\n", v);
+			break;
+		case DIF_OP_LDLS:
+		case DIF_OP_STLS:
+			if (v > DIF_VAR_OTHER_UBASE + maxlocal)
+				err += efunc(pc, "invalid variable %u\n", v);
+			break;
+		default:
+			break;
+		}
+	}
+
+	return (err);
 }
 
 /*
