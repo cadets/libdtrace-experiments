@@ -38,24 +38,24 @@ alloc_difo(dif_instr_t *buf, uint64_t *inttab, char *strtab,
 static void
 scanf_var(dtrace_difv_t *var)
 {
-	scanf("%" SCNu32, var->dtdv_name);
-	scanf("%" SCNu32, var->dtdv_id);
-	scanf("%" SCNu8, var->dtdv_kind);
-	scanf("%" SCNu8, var->dtdv_scope);
-	scanf("%" SCNu16, var->dtdv_flags);
-	scanf("%" SCNu8, var->dtdv_type.dtdt_kind);
-	scanf("%" SCNu8, var->dtdv_type.dtdt_ckind);
-	scanf("%" SCNu8, var->dtdv_type.dtdt_flags);
-	scanf("%" SCNu32, var->dtdv_type.dtdt_size);
+	scanf("%" SCNu32, &var->dtdv_name);
+	scanf("%" SCNu32, &var->dtdv_id);
+	scanf("%" SCNu8, &var->dtdv_kind);
+	scanf("%" SCNu8, &var->dtdv_scope);
+	scanf("%" SCNu16, &var->dtdv_flags);
+	scanf("%" SCNu8, &var->dtdv_type.dtdt_kind);
+	scanf("%" SCNu8, &var->dtdv_type.dtdt_ckind);
+	scanf("%" SCNu8, &var->dtdv_type.dtdt_flags);
+	scanf("%" SCNu32, &var->dtdv_type.dtdt_size);
 }
 
 static void
 scanf_statvar(dtrace_statvar_t *var)
 {
-	scanf("%" SCNu64, var->dtsv_data);
-	scanf("%zu", var->dtsv_size);
-	scanf("%d", var->dtsv_refcnt);
-	scanf("%" SCNu64, var->dtsv_data);
+	scanf("%" SCNu64, &var->dtsv_data);
+	scanf("%zu", &var->dtsv_size);
+	scanf("%d", &var->dtsv_refcnt);
+	scanf("%" SCNu64, &var->dtsv_data);
 	scanf_var(&var->dtsv_var);
 }
 
@@ -142,7 +142,7 @@ main(void)
 	 * Fill in the integer table
 	 */
 	for (i = 0; i < intlen; i++) {
-		scanf("%u", &intentry);
+		scanf("%" SCNu64, &intentry);
 		inttab[i] = intentry;
 	}
 
