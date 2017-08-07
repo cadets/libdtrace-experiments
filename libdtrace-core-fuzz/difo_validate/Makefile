@@ -1,4 +1,4 @@
-PROG=	instruction_input
+PROG=	difo_validate
 
 CC=	afl-clang
 

@@ -8278,7 +8278,11 @@ dtrace_difo_err(uint_t pc, const char *format, ...)
  * 5. The last instruction must be a "ret" instruction
  * 6. All branch targets must reference a valid instruction _after_ the branch
  */
+#ifdef _DTRACE_TESTS
+int
+#else
 static int
+#endif
 dtrace_difo_validate(dtrace_difo_t *dp, dtrace_vstate_t *vstate, uint_t nregs,
     cred_t *cr)
 {
