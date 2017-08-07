@@ -7,28 +7,6 @@
 #include "../../libdtrace-core/dtrace.h"
 #include "../../libdtrace-core/dtrace_impl.h"
 
-static void dtrace_nullop() {}
-
-static dtrace_pops_t pops = {
-(void (*)(void *, dtrace_probedesc_t *))dtrace_nullop,
-(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-(void (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-(void (*)(void *, dtrace_id_t, void *, dtrace_argdesc_t *))dtrace_nullop,
-NULL,
-(int (*)(void *, dtrace_id_t, void *))dtrace_nullop,
-(void (*)(void *, dtrace_id_t, void *))dtrace_nullop
-};
-
-static dtrace_pattr_t pap = {
-{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
-{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
-{ DTRACE_STABILITY_PRIVATE, DTRACE_STABILITY_PRIVATE, DTRACE_CLASS_UNKNOWN },
-{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
-{ DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
-};
-
 static dtrace_difo_t *
 alloc_difo(dif_instr_t *buf, uint64_t *inttab, char *strtab,
     dtrace_difv_t *vartab, uint_t buflen, uint_t intlen, uint_t strlen,
