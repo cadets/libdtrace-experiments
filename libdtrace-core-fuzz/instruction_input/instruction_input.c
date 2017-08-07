@@ -6,6 +6,10 @@
 #include "../../libdtrace-core/dtrace.h"
 #include "../../libdtrace-core/dtrace_impl.h"
 
+#ifndef _DTRACE_TESTS
+#error Compilation of this file only works if _DTRACE_TESTS is enabled.
+#endif
+
 static void dtrace_nullop() {}
 
 static dtrace_pops_t pops = {
