@@ -28,56 +28,50 @@ static dtrace_pattr_t pap = {
 { DTRACE_STABILITY_STABLE, DTRACE_STABILITY_STABLE, DTRACE_CLASS_COMMON },
 };
 
+static dtrace_difo_t *
+alloc_difo(dif_instr_t *buf, uint64_t *inttab, char *strtab,
+    dtrace_difv_t *vartab, uint_t buflen, uint_t intlen, uint_t strlen,
+    uint_t varlen, dtrace_diftype_t rtype, uint_t refcnt, uint_t destructive)
+{
+	dtrace_difo_t *dp;
+
+	dp = malloc(sizeof(dtrace_difo_t));
+
+	dp->dtdo_buf = buf;
+	dp->dtdo_inttab = inttab;
+	dp->dtdo_strtab = strtab;
+	dp->dtdo_vartab = vartab;
+	dp->dtdo_len = buflen;
+	dp->dtdo_intlen = intlen;
+	dp->dtdo_strlen = strlen;
+	dp->dtdo_varlen = varlen;
+	dp->dtdo_rtype = rtype;
+	dp->dtdo_refcnt = refcnt;
+	dp->dtdo_destructive = destructive;
+
+	return (dp);
+}
+
 int
 main(void)
 {
-	dtrace_mstate_t *mstate;
+	dtrace_difo_t *dp;
 	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
+	uint_t buflen;
+	uint_t intlen;
+	uint_t strlen;
+	uint_t varlen;
+	uint8_t dt_type;
+	uint8_t dt_ckind;
+	uint8_t dt_flags;
+	uint32_t dt_size;
 	dif_instr_t instr;
-	dtrace_id_t probeid;
-	dtrace_provider_id_t id;
-	cred_t *cr;
 	int err;
-	void *arg;
-	uint32_t priv;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
-
-	priv = 0x01;
-	arg = NULL;
-	cr = NULL;
 
 	err = dtrace_init();
 	if (err) {
-		printf("error: %s\n", strerror(err));
-		return (1);
-	}
-
-	err = dtrace_register("test", &pap, priv, cr, &pops, arg, &id);
-	if (err != 0) {
-		printf("error: %s\n", strerror(err));
-		return (1);
-	}
-
-	probeid = dtrace_probe_create(id, "test", "test", "test", 0, NULL);
-
-	mstate->dtms_probe = dtrace_getprobe(probeid);
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-
-	scanf("%d", &instr);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-	if (err) {
-		printf("error: %s\n", strerror(err));
-		return (1);
-	}
-
-	err = dtrace_unregister(id);
-	if (err != 0) {
 		printf("error: %s\n", strerror(err));
 		return (1);
 	}
@@ -88,10 +82,7 @@ main(void)
 		return (1);
 	}
 
-	free(mstate);
 	free(vstate);
-	free(state);
-	free(estate);
 
 	return (err);
 }
