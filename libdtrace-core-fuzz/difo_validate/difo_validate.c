@@ -36,6 +36,15 @@ alloc_difo(dif_instr_t *buf, uint64_t *inttab, char *strtab,
 }
 
 static void
+scanf_diftype(dtrace_diftype_t *var)
+{
+	scanf("%" SCNu8, &var->dtdt_kind);
+	scanf("%" SCNu8, &var->dtdt_ckind);
+	scanf("%" SCNu8, &var->dtdt_flags);
+	scanf("%" SCNu32, &var->dtdt_size);
+}
+
+static void
 scanf_var(dtrace_difv_t *var)
 {
 	scanf("%" SCNu32, &var->dtdv_name);
@@ -43,10 +52,7 @@ scanf_var(dtrace_difv_t *var)
 	scanf("%" SCNu8, &var->dtdv_kind);
 	scanf("%" SCNu8, &var->dtdv_scope);
 	scanf("%" SCNu16, &var->dtdv_flags);
-	scanf("%" SCNu8, &var->dtdv_type.dtdt_kind);
-	scanf("%" SCNu8, &var->dtdv_type.dtdt_ckind);
-	scanf("%" SCNu8, &var->dtdv_type.dtdt_flags);
-	scanf("%" SCNu32, &var->dtdv_type.dtdt_size);
+	scanf_diftype(&var->dtdv_type);
 }
 
 static void
@@ -62,6 +68,7 @@ scanf_statvar(dtrace_statvar_t *var)
 int
 main(void)
 {
+	dtrace_diftype_t dtype;
 	dtrace_difo_t *dp;
 	cred_t *cr;
 	dtrace_vstate_t *vstate;
@@ -214,6 +221,11 @@ main(void)
 	vstate->dtvs_locals = &vstate_locals;
 
 	scanf("%u", &nregs);
+
+	scanf_diftype(&dtype);
+
+	dp = alloc_difo(instr_buf, inttab, strtab, vartab, buflen, intlen,
+	    strlen, varlen, dtype, 1, 0);
 
 	err = dtrace_difo_validate(dp, vstate, nregs, cr);
 	if (err)
