@@ -7,7 +7,6 @@ CFLAGS+=	-I/usr/local/include
 CLEANDIRS+=	out/
 
 LDADD=	-ldtrace-core
-LDFLAGS+=	-v
 
 MAN=
 

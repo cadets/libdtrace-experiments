@@ -8,7 +8,6 @@ CFLAGS+=	-D_DTRACE_TESTS
 CLEANDIRS+=	out/
 
 LDADD=	-ldtrace-core
-LDFLAGS+=	-v
 
 MAN=
 
