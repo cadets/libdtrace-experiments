@@ -101,6 +101,9 @@ main(void)
 		return (1);
 	}
 
+	/*
+	 * The lengths of the buffers
+	 */
 	scanf("%u", &buflen);
 	scanf("%u", &intlen);
 	scanf("%u", &strlen);
@@ -111,23 +114,33 @@ main(void)
 	strtab = malloc(strlen);
 	vartab = malloc(sizeof(dtrace_difv_t) * varlen);
 
-	for (i = 0; i < buflen - 1; i++) {
+	/*
+	 * Fill in the instructions
+	 */
+	for (i = 0; i < buflen; i++) {
 		scanf("%u", &instr);
 		instr_buf[i] = instr;
 	}
 
-	instr_buf[buflen - 1] = DIF_INSTR_RET(3);
-
+	/*
+	 * Fill in the integer table
+	 */
 	for (i = 0; i < intlen; i++) {
 		scanf("%u", &intentry);
 		inttab[i] = intentry;
 	}
 
+	/*
+	 * Fill in the string table
+	 */
 	for (i = 0; i < strlen; i++) {
 		scanf("%c", &c);
 		strtab[i] = c;
 	}
 
+	/*
+	 * Fill in the variable table
+	 */
 	for (i = 0; i < varlen; i++) {
 		scanf("%" SCNu32, &vartab[i].dtdv_name);
 		scanf("%" SCNu32, &vartab[i].dtdv_id);
