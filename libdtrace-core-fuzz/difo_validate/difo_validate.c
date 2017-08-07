@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <inttypes.h>
 
 #include "../../libdtrace-core/dtrace.h"
 #include "../../libdtrace-core/dtrace_impl.h"
@@ -57,7 +58,7 @@ main(void)
 {
 	dtrace_difo_t *dp;
 	dtrace_vstate_t *vstate;
-	dtrace_instr_t *instr_buf;
+	dif_instr_t *instr_buf;
 	uint64_t *inttab;
 	uint64_t intentry;
 	char *strtab;
@@ -125,6 +126,18 @@ main(void)
 	for (i = 0; i < strlen; i++) {
 		scanf("%c", &c);
 		strtab[i] = c;
+	}
+
+	for (i = 0; i < varlen; i++) {
+		scanf("%" SCNu32, &vartab[i].dtdv_name);
+		scanf("%" SCNu32, &vartab[i].dtdv_id);
+		scanf("%" SCNu8, &vartab[i].dtdv_kind);
+		scanf("%" SCNu8, &vartab[i].dtdv_scope);
+		scanf("%" SCNu16, &vartab[i].dtdv_flags);
+		scanf("%" SCNu8, &vartab[i].dtdv_type.dtdt_kind);
+		scanf("%" SCNu8, &vartab[i].dtdv_type.dtdt_ckind);
+		scanf("%" SCNu8, &vartab[i].dtdv_type.dtdt_flags);
+		scanf("%" SCNu32, &vartab[i].dtdv_type.dtdt_size);
 	}
 
 	err = dtrace_deinit();
