@@ -57,23 +57,74 @@ main(void)
 {
 	dtrace_difo_t *dp;
 	dtrace_vstate_t *vstate;
+	dtrace_instr_t *instr_buf;
+	uint64_t *inttab;
+	uint64_t intentry;
+	char *strtab;
+	dtrace_difv_t *vartab;
 	uint_t buflen;
 	uint_t intlen;
 	uint_t strlen;
 	uint_t varlen;
-	uint8_t dt_type;
-	uint8_t dt_ckind;
-	uint8_t dt_flags;
+	uint_t i;
 	uint32_t dt_size;
 	dif_instr_t instr;
 	int err;
+	char c;
+	uint8_t dt_type;
+	uint8_t dt_ckind;
+	uint8_t dt_flags;
 
+	dp = NULL;
+	instr_buf = NULL;
+	inttab = NULL;
+	intentry = 0;
+	strtab = NULL;
+	vartab = NULL;
+	buflen = 0;
+	intlen = 0;
+	strlen = 0;
+	varlen = 0;
+	i = 0;
+	dt_size = 0;
+	instr = 0;
+	err = 0;
+	dt_type = 0;
+	dt_ckind = 0;
+	dt_flags = 0;
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
 
 	err = dtrace_init();
 	if (err) {
 		printf("error: %s\n", strerror(err));
 		return (1);
+	}
+
+	scanf("%u", &buflen);
+	scanf("%u", &intlen);
+	scanf("%u", &strlen);
+	scanf("%u", &varlen);
+
+	instr_buf = malloc(sizeof(dif_instr_t) * buflen);
+	inttab = malloc(sizeof(uint64_t) * intlen);
+	strtab = malloc(strlen);
+	vartab = malloc(sizeof(dtrace_difv_t) * varlen);
+
+	for (i = 0; i < buflen - 1; i++) {
+		scanf("%u", &instr);
+		instr_buf[i] = instr;
+	}
+
+	instr_buf[buflen - 1] = DIF_INSTR_RET(3);
+
+	for (i = 0; i < intlen; i++) {
+		scanf("%u", &intentry);
+		inttab[i] = intentry;
+	}
+
+	for (i = 0; i < strlen; i++) {
+		scanf("%c", &c);
+		strtab[i] = c;
 	}
 
 	err = dtrace_deinit();
