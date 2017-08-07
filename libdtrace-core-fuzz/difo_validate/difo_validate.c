@@ -137,7 +137,12 @@ main(void)
 		return (1);
 	}
 
+	free(instr_buf);
+	free(inttab);
+	free(strtab);
+	free(vartab);
 	free(vstate);
+	free(dp);
 
-	return (err);
+	return (0);
 }
