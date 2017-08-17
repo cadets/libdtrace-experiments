@@ -4795,9 +4795,6 @@ ATF_TC_BODY(DIF_SUBR_STRSTR, tc)
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(0, err);
-	/*
-	 * FIXME: This is *not* giving the expected results
-	 */
 	ATF_CHECK_EQ((uint64_t) big + sizeof("hello"), estate->dtes_regs[3]);
 
 	free(mstate);
