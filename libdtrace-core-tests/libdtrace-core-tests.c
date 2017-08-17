@@ -5486,6 +5486,55 @@ ATF_TC_BODY(DIF_SUBR_NTOHL, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_SUBR_NTOHLL);
+ATF_TC_BODY(DIF_SUBR_NTOHLL, tc)
+{
+	/*
+	 * Test the ntohll() subroutine given an expected input.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+	uint64_t network = 0x123456789A000000;
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_options[DTRACEOPT_STRSIZE] = 100;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[3] = network;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	estate->dtes_regs[3] = 0xBAAAAAAAD;
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_NTOHLL, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+#if BYTE_ORDER == LITTLE_ENDIAN
+	ATF_CHECK_EQ(0x9A78563412, estate->dtes_regs[3]);
+#else
+	ATF_CHECK_EQ(0x123456789A000000, estate->dtes_regs[3]);
+#endif
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -5629,6 +5678,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_SUBR_HTONLL);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_NTOHS);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_NTOHL);
+	ATF_TP_ADD_TC(tp, DIF_SUBR_NTOHLL);
 #endif
 
 	return (atf_no_error());
