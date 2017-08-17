@@ -5294,7 +5294,7 @@ ATF_TC_WITHOUT_HEAD(DIF_SUBR_HTONL);
 ATF_TC_BODY(DIF_SUBR_HTONL, tc)
 {
 	/*
-	 * Test the htons() subroutine given an expected input.
+	 * Test the htonl() subroutine given an expected input.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -5332,6 +5332,55 @@ ATF_TC_BODY(DIF_SUBR_HTONL, tc)
 
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(0x9A785634, estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_SUBR_HTONLL);
+ATF_TC_BODY(DIF_SUBR_HTONLL, tc)
+{
+	/*
+	 * Test the htonll() subroutine given an expected input.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+#if BYTE_ORDER == LITTLE_ENDIAN
+	uint64_t host = 0x123456789A;
+#else
+	uint64_t host = 0x9A78563412000000;
+#endif
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_options[DTRACEOPT_STRSIZE] = 100;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[3] = host;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	estate->dtes_regs[3] = 0xBAAAAAAAD;
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_HTONLL, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(0x9A78563412000000, estate->dtes_regs[3]);
 
 	free(mstate);
 	free(vstate);
@@ -5528,6 +5577,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_SUBR_LLTOSTR);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_HTONS);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_HTONL);
+	ATF_TP_ADD_TC(tp, DIF_SUBR_HTONLL);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_NTOHS);
 #endif
 
