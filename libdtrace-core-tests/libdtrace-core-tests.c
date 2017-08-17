@@ -4791,14 +4791,14 @@ ATF_TC_BODY(DIF_SUBR_STRSTR, tc)
 
 	estate->dtes_regs[3] = 0xBAAAAAAAD;
 
-	instr = DIF_INSTR_CALL(DIF_SUBR_STRRCHR, 3);
+	instr = DIF_INSTR_CALL(DIF_SUBR_STRSTR, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(0, err);
 	/*
 	 * FIXME: This is *not* giving the expected results
 	 */
-	ATF_CHECK_EQ(6, estate->dtes_regs[3]);
+	ATF_CHECK_EQ((uint64_t) big + sizeof("hello"), estate->dtes_regs[3]);
 
 	free(mstate);
 	free(vstate);
@@ -5004,7 +5004,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_SUBR_STRCHR_NON_NULL_TERMINATED);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_STRRCHR_EXPECTED);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_STRRCHR_NON_NULL_TERM);
-	ATF_TP_ADD_TC(tp, DIF_SUBR_STRSTR_EXPECTED);
+	ATF_TP_ADD_TC(tp, DIF_SUBR_STRSTR);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_STRTOK);
 #endif
 
