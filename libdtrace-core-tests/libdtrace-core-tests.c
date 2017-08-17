@@ -4955,7 +4955,7 @@ ATF_TC_WITHOUT_HEAD(DIF_SUBR_TOUPPER);
 ATF_TC_BODY(DIF_SUBR_TOUPPER, tc)
 {
 	/*
-	 * Test the substr() subroutine given an expected input.
+	 * Test the toupper() subroutine given an expected input.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -5008,7 +5008,7 @@ ATF_TC_WITHOUT_HEAD(DIF_SUBR_TOLOWER);
 ATF_TC_BODY(DIF_SUBR_TOLOWER, tc)
 {
 	/*
-	 * Test the substr() subroutine given an expected input.
+	 * Test the tolower() subroutine given an expected input.
 	 */
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -5045,6 +5045,68 @@ ATF_TC_BODY(DIF_SUBR_TOLOWER, tc)
 	estate->dtes_regs[3] = 0xBAAAAAAAD;
 
 	instr = DIF_INSTR_CALL(DIF_SUBR_TOLOWER, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_STREQ("hello world", (const char *)estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+	free(scratch);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRJOIN);
+ATF_TC_BODY(DIF_SUBR_STRJOIN, tc)
+{
+	/*
+	 * Test the strjoin() subroutine given an expected input.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+	char *scratch = NULL;
+	const char *first = "hello ";
+	const char *second = "world";
+
+	scratch = malloc(100);
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_options[DTRACEOPT_STRSIZE] = 20;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[3] = (uint64_t) first;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
+	mstate->dtms_scratch_base = (uintptr_t) scratch;
+	mstate->dtms_scratch_ptr = (uintptr_t) scratch;
+	mstate->dtms_scratch_size = 100;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[3] = (uint64_t) second;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(2, estate->dtes_ttop);
+
+	estate->dtes_regs[3] = 0xBAAAAAAAD;
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_STRJOIN, 3);
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(0, err);
@@ -5192,6 +5254,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_SUBR_SUBSTR);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_TOUPPER);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_TOLOWER);
+	ATF_TP_ADD_TC(tp, DIF_SUBR_STRJOIN);
 #endif
 
 	return (atf_no_error());
