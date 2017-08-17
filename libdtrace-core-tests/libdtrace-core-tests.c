@@ -4624,7 +4624,7 @@ ATF_TC_BODY(DIF_SUBR_STRCHR_NON_NULL_TERMINATED, tc)
 	 * For whatever reason, this is 0, but when we check against 0, it isn't
 	 * 0. ?????????????????????????????????????
 	 */
-	//atf_tc_fail("estate->dtes_regs[3] = %lu", estate->dtes_regs[3]);
+	atf_tc_fail("estate->dtes_regs[3] = %lu", estate->dtes_regs[3]);
 	ATF_CHECK_EQ(0, estate->dtes_regs[3]);
 
 	free(mstate);
@@ -4832,7 +4832,7 @@ ATF_TC_BODY(DIF_SUBR_STRTOK, tc)
 	state = calloc(1, sizeof (dtrace_state_t));
 	estate = calloc(1, sizeof (dtrace_estate_t));
 
-	state->dts_options[DTRACEOPT_STRSIZE] = 100;
+	state->dts_options[DTRACEOPT_STRSIZE] = 20;
 
 	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[2] = 100;
@@ -4861,11 +4861,18 @@ ATF_TC_BODY(DIF_SUBR_STRTOK, tc)
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(0, err);
-	/*
-	 * FIXME: This is *not* giving the expected results
-	 */
-	//atf_tc_fail("%s", (char *)estate->dtes_regs[3]);
 	ATF_CHECK_STREQ("hello", (const char *)estate->dtes_regs[3]);
+	ATF_CHECK_EQ((uintptr_t)scratch + state->dts_options[DTRACEOPT_STRSIZE], mstate->dtms_scratch_ptr);
+	ATF_CHECK_EQ((uintptr_t)str + sizeof("hell"), mstate->dtms_strtok);
+
+	estate->dtes_tupregs[0].dttk_value = 0;
+	estate->dtes_regs[3] = 0;
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_STRTOK, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_STREQ("world", (const char *)estate->dtes_regs[3]);
 
 	free(mstate);
 	free(vstate);
