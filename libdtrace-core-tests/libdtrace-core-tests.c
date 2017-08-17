@@ -4620,6 +4620,11 @@ ATF_TC_BODY(DIF_SUBR_STRCHR_NON_NULL_TERMINATED, tc)
 	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	ATF_CHECK_EQ(0, err);
+	/*
+	 * For whatever reason, this is 0, but when we check against 0, it isn't
+	 * 0. ?????????????????????????????????????
+	 */
+	//atf_tc_fail("estate->dtes_regs[3] = %lu", estate->dtes_regs[3]);
 	ATF_CHECK_EQ(0, estate->dtes_regs[3]);
 
 	free(mstate);
@@ -4738,8 +4743,8 @@ ATF_TC_BODY(DIF_SUBR_STRRCHR_NON_NULL_TERM, tc)
 	free(estate);
 }
 
-ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRSTR_EXPECTED);
-ATF_TC_BODY(DIF_SUBR_STRSTR_EXPECTED, tc)
+ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRSTR);
+ATF_TC_BODY(DIF_SUBR_STRSTR, tc)
 {
 	/*
 	 * Test the strstr() subroutine given an expected input.
@@ -4799,6 +4804,74 @@ ATF_TC_BODY(DIF_SUBR_STRSTR_EXPECTED, tc)
 	free(vstate);
 	free(state);
 	free(estate);
+}
+
+ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRTOK);
+ATF_TC_BODY(DIF_SUBR_STRTOK, tc)
+{
+	/*
+	 * Test the strtok() subroutine given an expected input.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+	char *scratch = NULL;
+	const char *str = "hello-world";
+	const char *tokenby = "-";
+
+	scratch = malloc(100);
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_options[DTRACEOPT_STRSIZE] = 100;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 100;
+	estate->dtes_regs[3] = (uint64_t) str;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
+	mstate->dtms_scratch_base = (uintptr_t) scratch;
+	mstate->dtms_scratch_ptr = (uintptr_t) scratch;
+	mstate->dtms_scratch_size = 100;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[2] = 100;
+	estate->dtes_regs[3] = (uint64_t) tokenby;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_EQ(2, estate->dtes_ttop);
+
+	estate->dtes_regs[3] = 0xBAAAAAAAD;
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_STRTOK, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	/*
+	 * FIXME: This is *not* giving the expected results
+	 */
+	//atf_tc_fail("%s", (char *)estate->dtes_regs[3]);
+	ATF_CHECK_STREQ("hello", (const char *)estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+	free(scratch);
 }
 
 #endif
@@ -4932,6 +5005,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_SUBR_STRRCHR_EXPECTED);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_STRRCHR_NON_NULL_TERM);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_STRSTR_EXPECTED);
+	ATF_TP_ADD_TC(tp, DIF_SUBR_STRTOK);
 #endif
 
 	return (atf_no_error());
