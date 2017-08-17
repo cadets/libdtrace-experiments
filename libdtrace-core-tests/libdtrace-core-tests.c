@@ -5256,14 +5256,11 @@ ATF_TC_BODY(DIF_SUBR_HTONS, tc)
 	dtrace_provider_id_t id;
 	dtrace_provider_t *provider;
 	int err;
-	char *scratch = NULL;
 #if BYTE_ORDER == LITTLE_ENDIAN
 	uint64_t host = 0x1234;
 #else
 	uint64_t host = 0x3412;
 #endif
-
-	scratch = malloc(100);
 
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
@@ -5291,7 +5288,6 @@ ATF_TC_BODY(DIF_SUBR_HTONS, tc)
 	free(vstate);
 	free(state);
 	free(estate);
-	free(scratch);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_SUBR_NTOHS);
@@ -5309,10 +5305,7 @@ ATF_TC_BODY(DIF_SUBR_NTOHS, tc)
 	dtrace_provider_id_t id;
 	dtrace_provider_t *provider;
 	int err;
-	char *scratch = NULL;
 	uint64_t network = 0x1234;
-
-	scratch = malloc(100);
 
 	mstate = calloc(1, sizeof (dtrace_mstate_t));
 	vstate = calloc(1, sizeof (dtrace_vstate_t));
@@ -5344,7 +5337,6 @@ ATF_TC_BODY(DIF_SUBR_NTOHS, tc)
 	free(vstate);
 	free(state);
 	free(estate);
-	free(scratch);
 }
 
 #endif
