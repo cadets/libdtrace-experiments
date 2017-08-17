@@ -5535,6 +5535,58 @@ ATF_TC_BODY(DIF_SUBR_NTOHLL, tc)
 	free(estate);
 }
 
+ATF_TC_WITHOUT_HEAD(DIF_SUBR_DIRNAME);
+ATF_TC_BODY(DIF_SUBR_DIRNAME, tc)
+{
+	/*
+	 * Test the dirname() subroutine given an expected input.
+	 */
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+	dtrace_id_t probeid;
+	dtrace_provider_id_t id;
+	dtrace_provider_t *provider;
+	int err;
+	char *scratch = NULL;
+	const char *str = "test/foo/bar/baz";
+
+	scratch = malloc(100);
+
+	mstate = calloc(1, sizeof (dtrace_mstate_t));
+	vstate = calloc(1, sizeof (dtrace_vstate_t));
+	state = calloc(1, sizeof (dtrace_state_t));
+	estate = calloc(1, sizeof (dtrace_estate_t));
+
+	state->dts_options[DTRACEOPT_STRSIZE] = 30;
+
+	estate->dtes_regs[DIF_REG_R0] = 0;
+	estate->dtes_regs[3] = (uint64_t) str;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
+	mstate->dtms_scratch_base = (uintptr_t) scratch;
+	mstate->dtms_scratch_ptr = (uintptr_t) scratch;
+	mstate->dtms_scratch_size = 100;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	estate->dtes_regs[3] = 0xBAAAAAAAD;
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_DIRNAME, 3);
+	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	ATF_CHECK_EQ(0, err);
+	ATF_CHECK_STREQ("test/foo/bar", (const char *)estate->dtes_regs[3]);
+
+	free(mstate);
+	free(vstate);
+	free(state);
+	free(estate);
+	free(scratch);
+}
+
 #endif
 
 ATF_TP_ADD_TCS(tp)
@@ -5679,6 +5731,7 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, DIF_SUBR_NTOHS);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_NTOHL);
 	ATF_TP_ADD_TC(tp, DIF_SUBR_NTOHLL);
+	ATF_TP_ADD_TC(tp, DIF_SUBR_DIRNAME);
 #endif
 
 	return (atf_no_error());
