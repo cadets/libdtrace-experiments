@@ -1,9 +1,6 @@
 #ifndef _DTRACE_API_H_
 #define	_DTRACE_API_H_
 
-#include "../libdtrace-core/dtrace.h"
-#include "../libdtrace-core/dtrace_impl.h"
-
 #ifndef _DTRACE_TESTS
 #error _DTRACE_TESTS is not defined.
 #endif
