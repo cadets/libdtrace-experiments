@@ -4178,7 +4178,6 @@ ATF_TC_BODY(DIF_SUBR_BCOPY, tc)
 
 	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
 	dst = dtapi_bcopy(dtapi_conf, string, string_len + 1, &err);
-	dtapi_deinit(dtapi_conf);
 
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK(dst != NULL);
@@ -4186,6 +4185,8 @@ ATF_TC_BODY(DIF_SUBR_BCOPY, tc)
 		ATF_CHECK_EQ(string_len, strlen(dst));
 		ATF_CHECK_STREQ(string, dst);
 	}
+
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRLEN_NULL);

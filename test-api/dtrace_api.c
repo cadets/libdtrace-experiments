@@ -103,6 +103,7 @@ dtapi_bcopy(dtapi_conf_t *conf, const void *src,
 	estate->dtes_regs[3] = 0;
 
 	instr = DIF_INSTR_ALLOCS(1, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 	if (estate->dtes_regs[3] == 0) {
 		*err = ENOMEM;
 		return (NULL);
@@ -125,7 +126,6 @@ dtapi_bcopy(dtapi_conf_t *conf, const void *src,
 
 	instr = DIF_INSTR_CALL(DIF_SUBR_BCOPY, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-	assert(strcmp(dst, "hello") == 0);
 
 	return (dst);
 }
