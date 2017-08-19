@@ -4247,46 +4247,21 @@ ATF_TC_BODY(DIF_SUBR_STRLEN_TOO_LONG, tc)
 	 *
 	 * Expected output is the DTRACEOPT_STRSIZE boundary.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	dtrace_id_t probeid;
-	dtrace_provider_id_t id;
-	dtrace_provider_t *provider;
+	dtapi_conf_t *dtapi_conf;
+	size_t s_size;
 	int err;
 	char *string = malloc(300);
+
 	strncpy(string, "testiuwhaufiwehfewhdiewuihfeiwhidhewfuewhdiehfiwaehiufewhiufewuuwhiuewfieduiwehfiuwehdihweifhwehdieuwhfiewdiwuehfiwehfuewi", 300);
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
-
-	state->dts_options[DTRACEOPT_STRSIZE] = 100;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[2] = 100;
-	estate->dtes_regs[3] = (uint64_t) string;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	s_size = 0;
+	s_size = dtapi_strlen(dtapi_conf, string, &err);
 
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(1, estate->dtes_ttop);
+	ATF_CHECK_EQ(20, s_size);
 
-	instr = DIF_INSTR_CALL(DIF_SUBR_STRLEN, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(100, estate->dtes_regs[3]);
-
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRLEN_NEGATIVE_LENGTH);
