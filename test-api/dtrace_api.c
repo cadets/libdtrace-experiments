@@ -78,7 +78,6 @@ dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 
 	instr = DIF_INSTR_CALL(DIF_SUBR_STRLEN, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-	assert(estate->dtes_regs[3] == 4);
 	
 	return (estate->dtes_regs[3]);
 }
