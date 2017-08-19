@@ -4491,60 +4491,17 @@ ATF_TC_BODY(DIF_SUBR_STRJOIN, tc)
 	/*
 	 * Test the strjoin() subroutine given an expected input.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	dtrace_id_t probeid;
-	dtrace_provider_id_t id;
-	dtrace_provider_t *provider;
+	dtapi_conf_t *dtapi_conf;
 	int err;
-	char *scratch = NULL;
 	const char *first = "hello ";
 	const char *second = "world";
+	char *retstr;
 
-	scratch = malloc(100);
-
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
-
-	state->dts_options[DTRACEOPT_STRSIZE] = 20;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[3] = (uint64_t) first;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-	mstate->dtms_scratch_base = (uintptr_t) scratch;
-	mstate->dtms_scratch_ptr = (uintptr_t) scratch;
-	mstate->dtms_scratch_size = 100;
-
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[3] = (uint64_t) second;
-
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	retstr = dtapi_strjoin(dtapi_conf, first, second, &err);
 
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(2, estate->dtes_ttop);
-
-	estate->dtes_regs[3] = 0xBAAAAAAAD;
-
-	instr = DIF_INSTR_CALL(DIF_SUBR_STRJOIN, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_STREQ("hello world", (const char *)estate->dtes_regs[3]);
-
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
-	free(scratch);
+	ATF_CHECK_STREQ("hello world", retstr);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRTOLL);
