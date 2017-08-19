@@ -15,7 +15,7 @@ void *		dtapi_bcopy(dtapi_conf_t *, const void *,
     		    size_t, int *);
 char *		dtapi_strchr(dtapi_conf_t *, const char *, int, int *);
 char *		dtapi_strrchr(dtapi_conf_t *, const char *, int, int *);
-char *		dtapi_strstr(const char *, const char *, int *);
+char *		dtapi_strstr(dtapi_conf_t *, const char *, const char *, int *);
 char *		dtapi_strtok(char *, const char *, int *);
 char *		dtapi_substr(const char *, size_t, size_t, int *);
 char *		dtapi_toupper(const char *, int *);
