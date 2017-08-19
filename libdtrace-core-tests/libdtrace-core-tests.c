@@ -4331,58 +4331,18 @@ ATF_TC_BODY(DIF_SUBR_STRCHR_NON_NULL_TERMINATED, tc)
 	/*
 	 * Test the strchr() subroutine given a non-NULL terminated string.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	dtrace_id_t probeid;
-	dtrace_provider_id_t id;
-	dtrace_provider_t *provider;
+	dtapi_conf_t *dtapi_conf;
 	int err;
 	char string[11] = "hello world";
+	char *retstr;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
-
-	string[10] = '0';
-	state->dts_options[DTRACEOPT_STRSIZE] = 100;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[2] = 100;
-	estate->dtes_regs[3] = (uint64_t) string;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	estate->dtes_regs[3] = 'x';
-
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 0, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	retstr = dtapi_strchr(dtapi_conf, string, 'x', &err);
 
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(2, estate->dtes_ttop);
+	ATF_CHECK_EQ(NULL, retstr);
 
-	estate->dtes_regs[3] = 0;
-
-	instr = DIF_INSTR_CALL(DIF_SUBR_STRCHR, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	ATF_CHECK_EQ(0, err);
-	/*
-	 * For whatever reason, this is 0, but when we check against 0, it isn't
-	 * 0. ?????????????????????????????????????
-	 */
-	atf_tc_fail("estate->dtes_regs[3] = %lu", estate->dtes_regs[3]);
-	ATF_CHECK_EQ(0, estate->dtes_regs[3]);
-
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRRCHR_EXPECTED);
