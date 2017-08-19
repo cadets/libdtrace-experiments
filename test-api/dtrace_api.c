@@ -422,40 +422,74 @@ dtapi_lltostr(dtapi_conf_t *conf, int64_t num, int *err)
 	return ((char *) estate->dtes_regs[3]);
 }
 
+static uint64_t
+dtapi_xtoyz(dtapi_conf_t *conf, uint64_t x, int *err, uint16_t subr)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	estate->dtes_regs[3] = x;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 2, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_CALL(subr, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_FLUSHTS;
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	return (estate->dtes_regs[3]);
+}
+
 uint16_t
-dtapi_htons(uint16_t hostshort, int *err)
+dtapi_htons(dtapi_conf_t *conf, uint16_t hostshort, int *err)
 {
 
+	return (dtapi_xtoyz(conf, hostshort, err, DIF_SUBR_HTONS));
 }
 
 uint32_t
-dtapi_htonl(uint32_t hostlong, int *err)
+dtapi_htonl(dtapi_conf_t *conf, uint32_t hostlong, int *err)
 {
 
+	return (dtapi_xtoyz(conf, hostlong, err, DIF_SUBR_HTONL));
 }
 
 uint64_t
-dtapi_htonll(uint64_t hostlonglong, int *err)
+dtapi_htonll(dtapi_conf_t *conf, uint64_t hostlonglong, int *err)
 {
 
+	return (dtapi_xtoyz(conf, hostlonglong, err, DIF_SUBR_HTONLL));
 }
 
 uint16_t
-dtapi_ntohs(uint16_t netshort, int *err)
+dtapi_ntohs(dtapi_conf_t *conf, uint16_t netshort, int *err)
 {
 
+	return (dtapi_xtoyz(conf, netshort, err, DIF_SUBR_NTOHS));
 }
 
 uint32_t
-dtapi_ntohl(uint32_t netlong, int *err)
+dtapi_ntohl(dtapi_conf_t *conf, uint32_t netlong, int *err)
 {
 
+	return (dtapi_xtoyz(conf, netlong, err, DIF_SUBR_NTOHL));
 }
 
 uint64_t
-dtapi_ntohll(uint64_t netlonglong, int *err)
+dtapi_ntohll(dtapi_conf_t *conf, uint64_t netlonglong, int *err)
 {
 
+	return (dtapi_xtoyz(conf, netlonglong, err, DIF_SUBR_NTOHLL));
 }
 
 char *
