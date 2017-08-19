@@ -239,9 +239,39 @@ dtapi_strtok(dtapi_conf_t *conf, char *str, const char *sep, int *err)
 }
 
 char *
-dtapi_substr(const char *s, size_t index, size_t len, int *err)
+dtapi_substr(dtapi_conf_t *conf, const char *s,
+    size_t index, size_t len, int *err)
 {
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
 
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	estate->dtes_regs[3] = (uint64_t) s;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	estate->dtes_regs[3] = index;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 2, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	estate->dtes_regs[3] = len;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 2, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_SUBSTR, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	return ((char *) estate->dtes_regs[3]);
 }
 
 char *
