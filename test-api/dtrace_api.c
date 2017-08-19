@@ -129,8 +129,9 @@ dtapi_bcopy(dtapi_conf_t *conf, const void *src,
 	return (dst);
 }
 
-char *
-dtapi_strchr(dtapi_conf_t *conf, const char *s, int c, int *err)
+static char *
+dtapi_strchr_generic(dtapi_conf_t *conf, const char *s,
+    int c, int *err, uint16_t subr)
 {
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -155,16 +156,22 @@ dtapi_strchr(dtapi_conf_t *conf, const char *s, int c, int *err)
 
 	estate->dtes_regs[3] = 0;
 
-	instr = DIF_INSTR_CALL(DIF_SUBR_STRCHR, 3);
+	instr = DIF_INSTR_CALL(subr, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
-	return (estate->dtes_regs[3]);
+	return ((char *) estate->dtes_regs[3]);
 }
 
 char *
-dtapi_strrchr(const char *s, int c, int *err)
+dtapi_strchr(dtapi_conf_t *conf, const char *s, int c, int *err)
 {
+	return (dtapi_strchr_generic(conf, s, c, err, DIF_SUBR_STRCHR));
+}
 
+char *
+dtapi_strrchr(dtapi_conf_t *conf, const char *s, int c, int *err)
+{
+	return (dtapi_strchr_generic(conf, s, c, err, DIF_SUBR_STRRCHR));
 }
 
 char *
