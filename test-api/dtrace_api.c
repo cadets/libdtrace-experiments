@@ -8,52 +8,112 @@
 
 #include "dtrace_api.h"
 
+struct dtapi_conf {
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+};
+
+/*
+ * Currently we just assume kernel access.
+ */
+dtapi_conf_t *
+dtapi_init(size_t scratch_size, size_t strsize, uint32_t access)
+{
+	dtapi_conf_t *conf;
+	char *scratch;
+
+	conf = calloc(1, sizeof(dtapi_conf_t));
+	conf->mstate = calloc(1, sizeof (dtrace_mstate_t));
+	conf->vstate = calloc(1, sizeof (dtrace_vstate_t));
+	conf->state = calloc(1, sizeof (dtrace_state_t));
+	conf->estate = calloc(1, sizeof (dtrace_estate_t));
+
+	scratch = calloc(1, scratch_size);
+
+	conf->mstate->dtms_scratch_base = (uintptr_t) scratch;
+	conf->mstate->dtms_scratch_ptr = (uintptr_t) scratch;
+	conf->mstate->dtms_scratch_size = scratch_size;
+	conf->mstate->dtms_access = access;
+
+	conf->state->dts_options[DTRACEOPT_STRSIZE] = strsize;
+
+	conf->estate->dtes_regs[DIF_REG_R0] = 0;
+
+	return (conf);
+}
+
+void
+dtapi_deinit(dtapi_conf_t *conf)
+{
+	free((void *) conf->mstate->dtms_scratch_base);
+	free(conf->mstate);
+	free(conf->vstate);
+	free(conf->state);
+	free(conf->estate);
+}
+
 size_t
-dtapi_strlen(const char *s, int *err)
+dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 {
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
 	dtrace_state_t *state;
 	dtrace_estate_t *estate;
 	dif_instr_t instr;
-	size_t retsize;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
 
 	state->dts_options[DTRACEOPT_STRSIZE] = 20;
 
-	estate->dtes_ttop = 0;
-	estate->dtes_regs[DIF_REG_R0] = 0;
 	estate->dtes_regs[3] = (uint64_t) s;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
 
 	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
-	/*
-	 * Given the current specification, PUSHTR can not return an error.
-	 */
 	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	instr = DIF_INSTR_CALL(DIF_SUBR_STRLEN, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 	assert(estate->dtes_regs[3] == 4);
 	
-	retsize = estate->dtes_regs[3];
-
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
-
-	return (retsize);
+	return (estate->dtes_regs[3]);
 }
 
 void
-dtapi_bcopy(const void *src, const void *dst, size_t len, int *err)
+dtapi_bcopy(dtapi_conf_t *conf, const void *src,
+    void *dst, size_t len, int *err)
 {
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
 
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	estate->dtes_regs[3] = (uint64_t) src;
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 0, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	estate->dtes_regs[3] = (uint64_t) dst;
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 0, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	estate->dtes_regs[2] = sizeof(size_t);
+	estate->dtes_regs[3] = len;
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 2, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_BCOPY, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	assert(strcmp("hello", dst) == 0);
 }
 
 char *

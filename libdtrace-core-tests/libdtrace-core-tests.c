@@ -4145,15 +4145,19 @@ ATF_TC_BODY(DIF_SUBR_STRLEN_EXPECTED, tc)
 	/*
 	 * Test the strlen() subroutine given an expected input.
 	 */
+	dtapi_conf_t *dtapi_conf;
 	const char *s = "test";
 	size_t s_size;
 	int err;
 
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
 	s_size = 0;
-	s_size = dtapi_strlen(s, &err);
+	s_size = dtapi_strlen(dtapi_conf, s, &err);
 
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(4, s_size);
+
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_SUBR_BCOPY);
@@ -4162,14 +4166,8 @@ ATF_TC_BODY(DIF_SUBR_BCOPY, tc)
 	/*
 	 * Test the bcopy() subroutine.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
+	dtapi_conf_t *dtapi_conf;
 	dif_instr_t instr;
-	dtrace_id_t probeid;
-	dtrace_provider_id_t id;
-	dtrace_provider_t *provider;
 	int err;
 	const char *string = "hello";
 	char *dst;
@@ -4177,58 +4175,17 @@ ATF_TC_BODY(DIF_SUBR_BCOPY, tc)
 
 	string_len = strlen(string);
 	dst = malloc(string_len);
+	err = 0;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
-
-	mstate->dtms_scratch_base = 0;
-	mstate->dtms_scratch_ptr = 100000000000000;
-
-	state->dts_options[DTRACEOPT_STRSIZE] = string_len;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[2] = string_len;
-	estate->dtes_regs[3] = (uint64_t) string;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(1, estate->dtes_ttop);
-
-	estate->dtes_regs[3] = (uint64_t) dst;
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(2, estate->dtes_ttop);
-
-	estate->dtes_regs[2] = sizeof(size_t);
-	/*
-	 * strlen + 1 because we want to copy '\0'
-	 */
-	estate->dtes_regs[3] = string_len + 1;
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, 0, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(3, estate->dtes_ttop);
-
-	instr = DIF_INSTR_CALL(DIF_SUBR_BCOPY, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	dtapi_bcopy(dtapi_conf, string, dst, string_len + 1, &err);
+	dtapi_deinit(dtapi_conf);
 
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(string_len, strlen(dst));
 	ATF_CHECK_STREQ(string, dst);
 
 	free(dst);
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRLEN_NULL);

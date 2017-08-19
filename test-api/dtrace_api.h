@@ -5,8 +5,14 @@
 #error _DTRACE_TESTS is not defined.
 #endif
 
-size_t		dtapi_strlen(const char *, int *);
-void		dtapi_bcopy(const void *, const void *, size_t, int *);
+struct dtapi_conf;
+typedef struct dtapi_conf dtapi_conf_t;
+
+dtapi_conf_t *	dtapi_init(size_t, size_t, uint32_t);
+void		dtapi_deinit(dtapi_conf_t *);
+size_t		dtapi_strlen(dtapi_conf_t *, const char *, int *);
+void		dtapi_bcopy(dtapi_conf_t *, const void *,
+    		    void *, size_t, int *);
 char *		dtapi_strchr(const char *, int, int *);
 char *		dtapi_strrchr(const char *, int, int *);
 char *		dtapi_strstr(const char *, const char *, int *);
