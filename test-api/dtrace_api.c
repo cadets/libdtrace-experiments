@@ -395,9 +395,31 @@ dtapi_strtoll(dtapi_conf_t *conf, const char *s, int *err)
 }
 
 char *
-dtapi_lltostr(int64_t num, int *err)
+dtapi_lltostr(dtapi_conf_t *conf, int64_t num, int *err)
 {
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
 
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	estate->dtes_regs[3] = num;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 2, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_LLTOSTR, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_FLUSHTS;
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	return ((char *) estate->dtes_regs[3]);
 }
 
 uint16_t
