@@ -78,6 +78,9 @@ dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 
 	instr = DIF_INSTR_CALL(DIF_SUBR_STRLEN, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_FLUSHTS;
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 	
 	return (estate->dtes_regs[3]);
 }
@@ -126,6 +129,9 @@ dtapi_bcopy(dtapi_conf_t *conf, const void *src,
 	instr = DIF_INSTR_CALL(DIF_SUBR_BCOPY, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	instr = DIF_INSTR_FLUSHTS;
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
 	return (dst);
 }
 
@@ -156,6 +162,9 @@ dtapi_strchr_generic(dtapi_conf_t *conf, const char *s,
 
 	instr = DIF_INSTR_CALL(subr, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_FLUSHTS;
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	return ((char *) estate->dtes_regs[3]);
 }
@@ -199,6 +208,9 @@ dtapi_strstr(dtapi_conf_t *conf, const char *big, const char *little, int *err)
 	instr = DIF_INSTR_CALL(DIF_SUBR_STRSTR, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	instr = DIF_INSTR_FLUSHTS;
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
 	return ((char *) estate->dtes_regs[3]);
 }
 
@@ -234,6 +246,9 @@ dtapi_strtok(dtapi_conf_t *conf, char *str, const char *sep, int *err)
 
 	instr = DIF_INSTR_CALL(DIF_SUBR_STRTOK, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_FLUSHTS;
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	return ((char *) estate->dtes_regs[3]);
 }
@@ -271,6 +286,9 @@ dtapi_substr(dtapi_conf_t *conf, const char *s,
 	instr = DIF_INSTR_CALL(DIF_SUBR_SUBSTR, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	instr = DIF_INSTR_FLUSHTS;
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
 	return ((char *) estate->dtes_regs[3]);
 }
 
@@ -296,6 +314,9 @@ dtapi_tox(dtapi_conf_t *conf, const char *s, int *err, uint16_t subr)
 
 	instr = DIF_INSTR_CALL(subr, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_FLUSHTS;
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	return ((char *) estate->dtes_regs[3]);
 }
@@ -339,17 +360,42 @@ dtapi_strjoin(dtapi_conf_t *conf, const char *first, const char *second, int *er
 	instr = DIF_INSTR_CALL(DIF_SUBR_STRJOIN, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
+	instr = DIF_INSTR_FLUSHTS;
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
 	return ((char *) estate->dtes_regs[3]);
 }
 
-long long
-dtapi_strtoll(const char *s, int *err)
+int64_t
+dtapi_strtoll(dtapi_conf_t *conf, const char *s, int *err)
 {
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
 
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	estate->dtes_regs[3] = (uint64_t) s;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_STRTOLL, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_FLUSHTS;
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	return (estate->dtes_regs[3]);
 }
 
 char *
-dtapi_lltostr(long long num, int *err)
+dtapi_lltostr(int64_t num, int *err)
 {
 
 }
