@@ -4712,50 +4712,18 @@ ATF_TC_BODY(DIF_SUBR_DIRNAME, tc)
 	/*
 	 * Test the dirname() subroutine given an expected input.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	dtrace_id_t probeid;
-	dtrace_provider_id_t id;
-	dtrace_provider_t *provider;
+	dtapi_conf_t *dtapi_conf;
 	int err;
-	char *scratch = NULL;
 	const char *str = "test/foo/bar/baz";
+	char *retstr;
 
-	scratch = malloc(100);
-
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
-
-	state->dts_options[DTRACEOPT_STRSIZE] = 30;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[3] = (uint64_t) str;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-	mstate->dtms_scratch_base = (uintptr_t) scratch;
-	mstate->dtms_scratch_ptr = (uintptr_t) scratch;
-	mstate->dtms_scratch_size = 100;
-
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	estate->dtes_regs[3] = 0xBAAAAAAAD;
-
-	instr = DIF_INSTR_CALL(DIF_SUBR_DIRNAME, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	retstr = dtapi_dirname(dtapi_conf, str, &err);
 
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_STREQ("test/foo/bar", (const char *)estate->dtes_regs[3]);
+	ATF_CHECK_STREQ("test/foo/bar", retstr);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
-	free(scratch);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_SUBR_BASENAME);
@@ -4764,50 +4732,18 @@ ATF_TC_BODY(DIF_SUBR_BASENAME, tc)
 	/*
 	 * Test the basename() subroutine given an expected input.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	dtrace_id_t probeid;
-	dtrace_provider_id_t id;
-	dtrace_provider_t *provider;
+	dtapi_conf_t *dtapi_conf;
 	int err;
-	char *scratch = NULL;
 	const char *str = "test/foo/bar/baz";
+	char *retstr;
 
-	scratch = malloc(100);
-
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
-
-	state->dts_options[DTRACEOPT_STRSIZE] = 30;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[3] = (uint64_t) str;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-	mstate->dtms_scratch_base = (uintptr_t) scratch;
-	mstate->dtms_scratch_ptr = (uintptr_t) scratch;
-	mstate->dtms_scratch_size = 100;
-
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	estate->dtes_regs[3] = 0xBAAAAAAAD;
-
-	instr = DIF_INSTR_CALL(DIF_SUBR_BASENAME, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	retstr = dtapi_basename(dtapi_conf, str, &err);
 
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_STREQ("baz", (const char *)estate->dtes_regs[3]);
+	ATF_CHECK_STREQ("baz", retstr);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
-	free(scratch);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_SUBR_CLEANPATH);
@@ -4816,50 +4752,18 @@ ATF_TC_BODY(DIF_SUBR_CLEANPATH, tc)
 	/*
 	 * Test the cleanpath() subroutine given an expected input.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	dtrace_id_t probeid;
-	dtrace_provider_id_t id;
-	dtrace_provider_t *provider;
+	dtapi_conf_t *dtapi_conf;
 	int err;
-	char *scratch = NULL;
 	const char *str = "////test///foo//bar//baz";
+	char *retstr;
 
-	scratch = malloc(100);
-
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
-
-	state->dts_options[DTRACEOPT_STRSIZE] = 30;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[3] = (uint64_t) str;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-	mstate->dtms_scratch_base = (uintptr_t) scratch;
-	mstate->dtms_scratch_ptr = (uintptr_t) scratch;
-	mstate->dtms_scratch_size = 100;
-
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	estate->dtes_regs[3] = 0xBAAAAAAAD;
-
-	instr = DIF_INSTR_CALL(DIF_SUBR_CLEANPATH, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	dtapi_conf = dtapi_init(100, 100, DTRACE_ACCESS_KERNEL);
+	retstr = dtapi_cleanpath(dtapi_conf, str, &err);
 
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_STREQ("/test/foo/bar/baz", (const char *)estate->dtes_regs[3]);
+	ATF_CHECK_STREQ("/test/foo/bar/baz", retstr);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
-	free(scratch);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_SUBR_MEMREF);

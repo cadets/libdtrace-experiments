@@ -30,9 +30,9 @@ uint64_t	dtapi_htonll(dtapi_conf_t *, uint64_t, int *);
 uint16_t	dtapi_ntohs(dtapi_conf_t *, uint16_t, int *);
 uint32_t	dtapi_ntohl(dtapi_conf_t *, uint32_t, int *);
 uint64_t	dtapi_ntohll(dtapi_conf_t *, uint64_t, int *);
-char *		dtapi_basename(const char *, int *);
-char *		dtapi_dirname(const char *, int *);
-char *		dtapi_cleanpath(const char *, int *);
+char *		dtapi_basename(dtapi_conf_t *, const char *, int *);
+char *		dtapi_dirname(dtapi_conf_t *, const char *, int *);
+char *		dtapi_cleanpath(dtapi_conf_t *, const char *, int *);
 uintptr_t *	dtapi_memref(uintptr_t, int *);
 
 #endif /* _DTRACE_API_H_ */
