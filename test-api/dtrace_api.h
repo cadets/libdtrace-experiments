@@ -19,8 +19,8 @@ char *		dtapi_strstr(dtapi_conf_t *, const char *, const char *, int *);
 char *		dtapi_strtok(dtapi_conf_t *, char *, const char *, int *);
 char *		dtapi_substr(dtapi_conf_t *, const char *,
       		    size_t, size_t, int *);
-char *		dtapi_toupper(const char *, int *);
-char *		dtapi_tolower(const char *, int *);
+char *		dtapi_toupper(dtapi_conf_t *, const char *, int *);
+char *		dtapi_tolower(dtapi_conf_t *, const char *, int *);
 char *		dtapi_strjoin(const char *, const char *, int *);
 long long	dtapi_strtoll(const char *, int *);
 char *		dtapi_lltostr(long long, int *);

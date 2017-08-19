@@ -274,16 +274,42 @@ dtapi_substr(dtapi_conf_t *conf, const char *s,
 	return ((char *) estate->dtes_regs[3]);
 }
 
-char *
-dtapi_toupper(const char *s, int *err)
+static char *
+dtapi_tox(dtapi_conf_t *conf, const char *s, int *err, uint16_t subr)
 {
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
 
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	estate->dtes_regs[3] = (uint64_t) s;
+	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_CALL(subr, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	return ((char *) estate->dtes_regs[3]);
 }
 
 char *
-dtapi_tolower(const char *s, int *err)
+dtapi_toupper(dtapi_conf_t *conf, const char *s, int *err)
 {
+	return (dtapi_tox(conf, s, err, DIF_SUBR_TOUPPER));
+}
 
+char *
+dtapi_tolower(dtapi_conf_t *conf, const char *s, int *err)
+{
+	return (dtapi_tox(conf, s, err, DIF_SUBR_TOLOWER));
 }
 
 char *
