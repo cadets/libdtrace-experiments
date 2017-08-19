@@ -13,7 +13,7 @@ void		dtapi_deinit(dtapi_conf_t *);
 size_t		dtapi_strlen(dtapi_conf_t *, const char *, int *);
 void *		dtapi_bcopy(dtapi_conf_t *, const void *,
     		    size_t, int *);
-char *		dtapi_strchr(const char *, int, int *);
+char *		dtapi_strchr(dtapi_conf_t *, const char *, int, int *);
 char *		dtapi_strrchr(const char *, int, int *);
 char *		dtapi_strstr(const char *, const char *, int *);
 char *		dtapi_strtok(char *, const char *, int *);
