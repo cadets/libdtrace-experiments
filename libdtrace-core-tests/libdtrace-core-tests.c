@@ -4772,61 +4772,22 @@ ATF_TC_BODY(DIF_SUBR_MEMREF, tc)
 	/*
 	 * Test the memref() subroutine given an expected input.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	dtrace_id_t probeid;
-	dtrace_provider_id_t id;
-	dtrace_provider_t *provider;
+	dtapi_conf_t *dtapi_conf;
 	int err;
-	char *scratch = NULL;
 	const char *str = "hello world";
+	size_t str_len;
 	uintptr_t *memref;
 
-	scratch = malloc(100);
+	str_len = strlen(str);
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
+	dtapi_conf = dtapi_init(100, 100, DTRACE_ACCESS_KERNEL);
+	memref = dtapi_memref(dtapi_conf, str, str_len, &err);
 
-	state->dts_options[DTRACEOPT_STRSIZE] = 30;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[3] = (uint64_t) str;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-	mstate->dtms_scratch_base = (uintptr_t) scratch;
-	mstate->dtms_scratch_ptr = (uintptr_t) scratch;
-	mstate->dtms_scratch_size = 100;
-
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	ATF_CHECK_EQ(0, err);
-
-	estate->dtes_regs[3] = strlen(str);
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	ATF_CHECK_EQ(0, err);
-
-	estate->dtes_regs[3] = 0xBAAAAAAAD;
-
-	instr = DIF_INSTR_CALL(DIF_SUBR_MEMREF, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	memref = (uintptr_t *)estate->dtes_regs[3];
 	ATF_CHECK_EQ(0, err);
 	ATF_CHECK_EQ(memref[0], (uintptr_t) str);
-	ATF_CHECK_EQ(memref[1], strlen(str));
+	ATF_CHECK_EQ(memref[1], str_len);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
-	free(scratch);
+	dtapi_deinit(dtapi_conf);
 }
 
 #endif

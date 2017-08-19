@@ -544,7 +544,34 @@ dtapi_cleanpath(dtapi_conf_t *conf, const char *path, int *err)
 }
 
 uintptr_t *
-dtapi_memref(uintptr_t ptr, int *err)
+dtapi_memref(dtapi_conf_t *conf, uintptr_t ptr, size_t len, int *err)
 {
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
 
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	estate->dtes_regs[3] = (uint64_t) ptr;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	estate->dtes_regs[3] = len;
+
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 2, 3);
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_CALL(DIF_SUBR_MEMREF, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	instr = DIF_INSTR_FLUSHTS;
+	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	return ((uintptr_t *) estate->dtes_regs[3]);
 }
