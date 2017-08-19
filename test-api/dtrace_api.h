@@ -11,8 +11,8 @@ typedef struct dtapi_conf dtapi_conf_t;
 dtapi_conf_t *	dtapi_init(size_t, size_t, uint32_t);
 void		dtapi_deinit(dtapi_conf_t *);
 size_t		dtapi_strlen(dtapi_conf_t *, const char *, int *);
-void		dtapi_bcopy(dtapi_conf_t *, const void *,
-    		    void *, size_t, int *);
+void *		dtapi_bcopy(dtapi_conf_t *, const void *,
+    		    size_t, int *);
 char *		dtapi_strchr(const char *, int, int *);
 char *		dtapi_strrchr(const char *, int, int *);
 char *		dtapi_strstr(const char *, const char *, int *);

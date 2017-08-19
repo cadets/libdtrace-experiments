@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h>
 
 #include "../libdtrace-core/dtrace.h"
 #include "../libdtrace-core/dtrace_impl.h"
@@ -82,20 +83,32 @@ dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 	return (estate->dtes_regs[3]);
 }
 
-void
+void *
 dtapi_bcopy(dtapi_conf_t *conf, const void *src,
-    void *dst, size_t len, int *err)
+    size_t len, int *err)
 {
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
 	dtrace_state_t *state;
 	dtrace_estate_t *estate;
 	dif_instr_t instr;
+	void *dst;
 
 	mstate = conf->mstate;
 	vstate = conf->vstate;
 	state = conf->state;
 	estate = conf->estate;
+
+	estate->dtes_regs[1] = len;
+	estate->dtes_regs[3] = 0;
+
+	instr = DIF_INSTR_ALLOCS(1, 3);
+	if (estate->dtes_regs[3] == 0) {
+		*err = ENOMEM;
+		return (NULL);
+	}
+
+	dst = (void *) estate->dtes_regs[3];
 
 	estate->dtes_regs[3] = (uint64_t) src;
 	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 0, 3);
@@ -112,8 +125,9 @@ dtapi_bcopy(dtapi_conf_t *conf, const void *src,
 
 	instr = DIF_INSTR_CALL(DIF_SUBR_BCOPY, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+	assert(strcmp(dst, "hello") == 0);
 
-	assert(strcmp("hello", dst) == 0);
+	return (dst);
 }
 
 char *
