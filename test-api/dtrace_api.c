@@ -154,8 +154,6 @@ dtapi_strchr_generic(dtapi_conf_t *conf, const char *s,
 	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 0, 3);
 	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
-	estate->dtes_regs[3] = 0;
-
 	instr = DIF_INSTR_CALL(subr, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
@@ -198,8 +196,6 @@ dtapi_strstr(dtapi_conf_t *conf, const char *big, const char *little, int *err)
 	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
 	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
-	estate->dtes_regs[3] = 0xBAAAAAAAD;
-
 	instr = DIF_INSTR_CALL(DIF_SUBR_STRSTR, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
@@ -229,8 +225,6 @@ dtapi_strtok(dtapi_conf_t *conf, char *str, const char *sep, int *err)
 
 	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
 	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	estate->dtes_regs[3] = 0xBAAAAAAAD;
 
 	instr = DIF_INSTR_CALL(DIF_SUBR_STRTOK, 3);
 	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
