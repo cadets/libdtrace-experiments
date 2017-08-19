@@ -4293,53 +4293,16 @@ ATF_TC_BODY(DIF_SUBR_STRLEN_GARBAGE_PTR, tc)
 	 * Test strlen() by giving a garbage pointer. Breaks in userspace, is
 	 * fine in the kernel.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	dtrace_id_t probeid;
-	dtrace_provider_id_t id;
-	dtrace_provider_t *provider;
+	dtapi_conf_t *dtapi_conf;
+	size_t s_size;
 	int err;
-	char *string = "hello";
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	s_size = 0;
 
-	state->dts_options[DTRACEOPT_STRSIZE] = 100;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[2] = 100;
-	estate->dtes_regs[3] = (uint64_t) 123;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-
-	/*
-	 * This does not happen in the kernel due to the toxic range mechanism
-	 * that DTrace implements, however, in userspace, it's not as obvious as
-	 * to how to do that.
-	 */
 	atf_tc_expect_death("Accessing garbage");
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTR, DIF_TYPE_STRING, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(1, estate->dtes_ttop);
-
-	instr = DIF_INSTR_CALL(DIF_SUBR_STRLEN, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	atf_tc_expect_fail("Garbage pointer sent in: %zu", estate->dtes_regs[3]);
-
-	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(0, estate->dtes_regs[3]);
-
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
+	s_size = dtapi_strlen(dtapi_conf, (char *) 123, &err);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_SUBR_STRCHR_EXPECTED);
