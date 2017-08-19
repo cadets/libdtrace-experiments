@@ -1,5 +1,6 @@
 PROG=	libdtrace-core-tests
 
+SRCS=		libdtrace-core-tests.c ../test-api/dtrace_api.c
 CFLAGS+=	-I/usr/local/include
 
 .if defined(_DTRACE_TESTS)
