@@ -220,6 +220,30 @@ dtapi_op_urem(dtapi_conf_t *conf, uint64_t r1_val,
 	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_UREM));
 }
 
+uint64_t
+dtapi_op_not(dtapi_conf_t *conf, uint64_t r1_val, int *err)
+{
+	uint64_t tmp, rd;
+
+	tmp = conf->estate->dtes_regs[2];
+	rd = dtapi_reg_op(conf, r1_val, 0, err, DIF_OP_NOT);
+	conf->estate->dtes_regs[2] = tmp;
+
+	return (rd);
+}
+
+uint64_t
+dtapi_op_mov(dtapi_conf_t *conf, uint64_t r1_val, int *err)
+{
+	uint64_t tmp, rd;
+
+	tmp = conf->estate->dtes_regs[2];
+	rd = dtapi_reg_op(conf, r1_val, 0, err, DIF_OP_MOV);
+	conf->estate->dtes_regs[2] = tmp;
+
+	return (rd);
+}
+
 size_t
 dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 {

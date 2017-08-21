@@ -32,6 +32,8 @@ uint64_t	dtapi_op_sdiv(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_udiv(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_srem(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_urem(dtapi_conf_t *, uint64_t, uint64_t, int *);
+uint64_t	dtapi_op_not(dtapi_conf_t *, uint64_t, int *);
+uint64_t	dtapi_op_mov(dtapi_conf_t *, uint64_t, int *);
 
 /*
  * Subroutines
