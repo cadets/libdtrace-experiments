@@ -159,6 +159,22 @@ dtapi_op_udiv(dtapi_conf_t *conf, uint64_t r1_val,
 	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_UDIV));
 }
 
+uint64_t
+dtapi_op_srem(dtapi_conf_t *conf, uint64_t r1_val,
+    uint64_t r2_val, int *err)
+{
+
+	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_SREM));
+}
+
+uint64_t
+dtapi_op_urem(dtapi_conf_t *conf, uint64_t r1_val,
+    uint64_t r2_val, int *err)
+{
+
+	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_UREM));
+}
+
 size_t
 dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 {
