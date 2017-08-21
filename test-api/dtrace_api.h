@@ -13,11 +13,13 @@ typedef struct dtapi_conf dtapi_conf_t;
  */
 dtapi_conf_t *	dtapi_init(size_t, size_t, uint32_t);
 void		dtapi_deinit(dtapi_conf_t *);
+void		dtapi_set_textlen(dtapi_conf_t *, uint_t);
 
 /*
  * Low-level operations
  */
 void		dtapi_op_nop(dtapi_conf_t *, int *);
+uint_t		dtapi_op_ret(dtapi_conf_t *, int *);
 uint64_t	dtapi_op_or(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_xor(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_and(dtapi_conf_t *, uint64_t, uint64_t, int *);

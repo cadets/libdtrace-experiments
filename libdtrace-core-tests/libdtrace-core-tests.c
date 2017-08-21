@@ -248,36 +248,17 @@ ATF_TC_BODY(DIF_OP_RET, tc)
 	/*
 	 * Test the OR operation of the DTrace machine.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
+	dtapi_conf_t *dtapi_conf;
+	uint_t pc;
 	int err;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[3] = EPERM;
-	estate->dtes_pc = 0;
-	estate->dtes_textlen = 1000;
-
-	instr = DIF_INSTR_FMT(DIF_OP_RET, 1, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	dtapi_set_textlen(dtapi_conf, 1000);
+	pc = dtapi_op_ret(dtapi_conf, &err);
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(EPERM, estate->dtes_rval);
-	ATF_CHECK_EQ(EPERM, estate->dtes_regs[3]);
-	ATF_CHECK_EQ(1000, estate->dtes_pc);
-	ATF_CHECK_EQ(1000, estate->dtes_textlen);
+	ATF_CHECK_EQ(1000, pc);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_OR);

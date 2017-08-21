@@ -56,6 +56,13 @@ dtapi_deinit(dtapi_conf_t *conf)
 }
 
 void
+dtapi_set_textlen(dtapi_conf_t *conf, uint_t textlen)
+{
+
+	conf->estate->dtes_textlen = textlen;
+}
+
+void
 dtapi_op_nop(dtapi_conf_t *conf, int *err)
 {
 	dtrace_mstate_t *mstate;
@@ -71,6 +78,26 @@ dtapi_op_nop(dtapi_conf_t *conf, int *err)
 
 	instr = DIF_INSTR_FMT(DIF_OP_NOP, 1, 2, 3);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+}
+
+uint_t
+dtapi_op_ret(dtapi_conf_t *conf, int *err)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	instr = DIF_INSTR_FMT(DIF_OP_RET, 1, 2, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	return (estate->dtes_pc);
 }
 
 static uint64_t
