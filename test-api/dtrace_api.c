@@ -101,7 +101,8 @@ dtapi_op_ret(dtapi_conf_t *conf, int *err)
 }
 
 static uint64_t
-dtapi_reg_op(dtapi_conf_t *conf, uint64_t r1_val,
+dtapi_reg_op(dtapi_conf_t *conf, uint64_t r1,
+    uint64_t r2, uint64_t rd, uint64_t r1_val,
     uint64_t r2_val, int *err, uint16_t op)
 {
 	dtrace_mstate_t *mstate;
@@ -115,13 +116,14 @@ dtapi_reg_op(dtapi_conf_t *conf, uint64_t r1_val,
 	state = conf->state;
 	estate = conf->estate;
 
-	estate->dtes_regs[1] = r1_val;
-	estate->dtes_regs[2] = r2_val;
+	estate->dtes_regs[r1] = r1_val;
+	estate->dtes_regs[r2] = r2_val;
+	estate->dtes_regs[DIF_REG_R0] = 0;
 
-	instr = DIF_INSTR_FMT(op, 1, 2, 3);
+	instr = DIF_INSTR_FMT(op, r1, r2, rd);
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
-	return (estate->dtes_regs[3]);
+	return (estate->dtes_regs[rd]);
 }
 
 uint64_t
@@ -129,7 +131,7 @@ dtapi_op_or(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
 
-	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_OR));
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_OR));
 }
 
 uint64_t
@@ -137,7 +139,7 @@ dtapi_op_xor(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
 
-	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_XOR));
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_XOR));
 }
 
 uint64_t
@@ -145,7 +147,7 @@ dtapi_op_and(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
 
-	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_AND));
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_AND));
 }
 
 uint64_t
@@ -153,7 +155,7 @@ dtapi_op_sll(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
 
-	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_SLL));
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_SLL));
 }
 
 uint64_t
@@ -161,7 +163,7 @@ dtapi_op_srl(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
 
-	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_SRL));
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_SRL));
 }
 
 uint64_t
@@ -169,7 +171,7 @@ dtapi_op_sub(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
 
-	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_SUB));
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_SUB));
 }
 
 uint64_t
@@ -177,7 +179,7 @@ dtapi_op_add(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
 
-	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_ADD));
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_ADD));
 }
 
 uint64_t
@@ -185,7 +187,7 @@ dtapi_op_mul(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
 
-	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_MUL));
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_MUL));
 }
 
 uint64_t
@@ -193,7 +195,7 @@ dtapi_op_sdiv(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
 
-	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_SDIV));
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_SDIV));
 }
 
 uint64_t
@@ -201,7 +203,7 @@ dtapi_op_udiv(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
 
-	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_UDIV));
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_UDIV));
 }
 
 uint64_t
@@ -209,7 +211,7 @@ dtapi_op_srem(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
 
-	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_SREM));
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_SREM));
 }
 
 uint64_t
@@ -217,31 +219,20 @@ dtapi_op_urem(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
 
-	return (dtapi_reg_op(conf, r1_val, r2_val, err, DIF_OP_UREM));
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_UREM));
 }
 
 uint64_t
 dtapi_op_not(dtapi_conf_t *conf, uint64_t r1_val, int *err)
 {
-	uint64_t tmp, rd;
 
-	tmp = conf->estate->dtes_regs[2];
-	rd = dtapi_reg_op(conf, r1_val, 0, err, DIF_OP_NOT);
-	conf->estate->dtes_regs[2] = tmp;
-
-	return (rd);
+	return (dtapi_reg_op(conf, 1, 0, 3, r1_val, 0, err, DIF_OP_NOT));
 }
 
 uint64_t
 dtapi_op_mov(dtapi_conf_t *conf, uint64_t r1_val, int *err)
 {
-	uint64_t tmp, rd;
-
-	tmp = conf->estate->dtes_regs[2];
-	rd = dtapi_reg_op(conf, r1_val, 0, err, DIF_OP_MOV);
-	conf->estate->dtes_regs[2] = tmp;
-
-	return (rd);
+	return (dtapi_reg_op(conf, 1, 0, 3, r1_val, 0, err, DIF_OP_MOV));
 }
 
 size_t
