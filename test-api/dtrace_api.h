@@ -18,6 +18,8 @@ uint64_t	dtapi_op_srl(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_sub(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_add(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_mul(dtapi_conf_t *, uint64_t, uint64_t, int *);
+uint64_t	dtapi_op_sdiv(dtapi_conf_t *, uint64_t, uint64_t, int *);
+uint64_t	dtapi_op_udiv(dtapi_conf_t *, uint64_t, uint64_t, int *);
 size_t		dtapi_strlen(dtapi_conf_t *, const char *, int *);
 void *		dtapi_bcopy(dtapi_conf_t *, const void *,
     		    size_t, int *);
