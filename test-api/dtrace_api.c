@@ -55,6 +55,24 @@ dtapi_deinit(dtapi_conf_t *conf)
 	free(conf->estate);
 }
 
+void
+dtapi_op_nop(dtapi_conf_t *conf, int *err)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	instr = DIF_INSTR_FMT(DIF_OP_NOP, 1, 2, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+}
+
 static uint64_t
 dtapi_reg_op(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err, uint16_t op)

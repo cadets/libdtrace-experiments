@@ -232,66 +232,14 @@ ATF_TC_BODY(DIF_OP_NOP, tc)
 	/*
 	 * Test the NOP operation of the DTrace machine.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
+	dtapi_conf_t *dtapi_conf;
 	int err;
-	uint64_t regs[DIF_DIR_NREGS];
-	const uint64_t *inttab;
-	const char *strtab;
-	uint64_t rval;
-	int64_t cc_r;
-	uint_t pc;
-	uint_t textlen;
-	uint8_t cc_c;
-	uint8_t cc_n;
-	uint8_t cc_v;
-	uint8_t cc_z;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
-
-	pc = estate->dtes_pc = 0;
-	regs[DIF_REG_R0] = estate->dtes_regs[DIF_REG_R0] = 0;
-	regs[1] = estate->dtes_regs[1] = 0;
-	regs[2] = estate->dtes_regs[2] = 0;
-	regs[3] = estate->dtes_regs[3] = 0;
-	cc_c = estate->dtes_cc_c = 0;
-	cc_v = estate->dtes_cc_v = 0;
-	cc_n = estate->dtes_cc_n = 0;
-	cc_z = estate->dtes_cc_z = 0;
-	cc_r = estate->dtes_cc_r = 0;
-	textlen = estate->dtes_textlen = 100;
-	inttab = estate->dtes_inttab = NULL;
-	strtab = estate->dtes_strtab = NULL;
-
-	instr = DIF_INSTR_FMT(DIF_OP_NOP, 1, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	dtapi_op_nop(dtapi_conf, &err);
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(pc, estate->dtes_pc);
-	ATF_CHECK_EQ(regs[DIF_REG_R0], estate->dtes_regs[DIF_REG_R0]);
-	ATF_CHECK_EQ(regs[1], estate->dtes_regs[1]);
-	ATF_CHECK_EQ(regs[2], estate->dtes_regs[2]);
-	ATF_CHECK_EQ(regs[3], estate->dtes_regs[3]);
-	ATF_CHECK_EQ(cc_c, estate->dtes_cc_c);
-	ATF_CHECK_EQ(cc_v, estate->dtes_cc_v);
-	ATF_CHECK_EQ(cc_n, estate->dtes_cc_n);
-	ATF_CHECK_EQ(cc_z, estate->dtes_cc_z);
-	ATF_CHECK_EQ(cc_r, estate->dtes_cc_r);
-	ATF_CHECK_EQ(textlen, estate->dtes_textlen);
-	ATF_CHECK_EQ(inttab, estate->dtes_inttab);
-	ATF_CHECK_EQ(strtab, estate->dtes_strtab);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
-
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_RET);

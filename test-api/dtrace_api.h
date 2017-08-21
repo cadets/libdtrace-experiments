@@ -17,6 +17,7 @@ void		dtapi_deinit(dtapi_conf_t *);
 /*
  * Low-level operations
  */
+void		dtapi_op_nop(dtapi_conf_t *, int *);
 uint64_t	dtapi_op_or(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_xor(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_and(dtapi_conf_t *, uint64_t, uint64_t, int *);
