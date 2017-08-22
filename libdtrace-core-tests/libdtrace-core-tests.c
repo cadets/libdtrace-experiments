@@ -646,36 +646,22 @@ ATF_TC_BODY(DIF_OP_CMP_R1_EQ_R2, tc)
 	/*
 	 * Test the CMP operation of the DTrace machine when r1 is equal to r2.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
+	dtapi_conf_t *dtapi_conf;
+	dtapi_state_t *dtapi_state;
 	int err;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	dtapi_op_cmp(dtapi_conf, 20, 20, &err);
 
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[1] = 20;
-	estate->dtes_regs[2] = 20;
-
-	instr = DIF_INSTR_FMT(DIF_OP_CMP, 1, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
+	dtapi_state = dtapi_getstate(dtapi_conf);
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(0, estate->dtes_cc_r);
-	ATF_CHECK_EQ(0, estate->dtes_cc_n);
-	ATF_CHECK_EQ(1, estate->dtes_cc_z);
-	ATF_CHECK_EQ(0, estate->dtes_cc_v);
-	ATF_CHECK_EQ(0, estate->dtes_cc_c);
+	ATF_CHECK_EQ(0, dtapi_state->cc_r);
+	ATF_CHECK_EQ(0, dtapi_state->cc_n);
+	ATF_CHECK_EQ(1, dtapi_state->cc_z);
+	ATF_CHECK_EQ(0, dtapi_state->cc_v);
+	ATF_CHECK_EQ(0, dtapi_state->cc_c);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_CMP_R1_LT_R2);
@@ -685,36 +671,22 @@ ATF_TC_BODY(DIF_OP_CMP_R1_LT_R2, tc)
 	 * Test the CMP operation of the DTrace machine when r1 is lesser than
 	 * r2.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
+	dtapi_conf_t *dtapi_conf;
+	dtapi_state_t *dtapi_state;
 	int err;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	dtapi_op_cmp(dtapi_conf, 10, 20, &err);
 
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[1] = 10;
-	estate->dtes_regs[2] = 20;
-
-	instr = DIF_INSTR_FMT(DIF_OP_CMP, 1, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
+	dtapi_state = dtapi_getstate(dtapi_conf);
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(-10, estate->dtes_cc_r);
-	ATF_CHECK_EQ(1, estate->dtes_cc_n);
-	ATF_CHECK_EQ(0, estate->dtes_cc_z);
-	ATF_CHECK_EQ(0, estate->dtes_cc_v);
-	ATF_CHECK_EQ(1, estate->dtes_cc_c);
+	ATF_CHECK_EQ(-10, dtapi_state->cc_r);
+	ATF_CHECK_EQ(1, dtapi_state->cc_n);
+	ATF_CHECK_EQ(0, dtapi_state->cc_z);
+	ATF_CHECK_EQ(0, dtapi_state->cc_v);
+	ATF_CHECK_EQ(1, dtapi_state->cc_c);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
+	dtapi_deinit(dtapi_conf);
 }
 
 /*
@@ -727,45 +699,30 @@ ATF_TC_BODY(DIF_OP_TST, tc)
 	/*
 	 * Test the TST operation of the DTrace machine.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
+	dtapi_conf_t *dtapi_conf;
+	dtapi_state_t *dtapi_state;
 	int err;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	dtapi_op_tst(dtapi_conf, 1, &err);
 
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[1] = 1;
-
-	instr = DIF_INSTR_FMT(DIF_OP_TST, 1, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
+	dtapi_state = dtapi_getstate(dtapi_conf);
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(0, estate->dtes_cc_n);
-	ATF_CHECK_EQ(0, estate->dtes_cc_z);
-	ATF_CHECK_EQ(0, estate->dtes_cc_v);
-	ATF_CHECK_EQ(0, estate->dtes_cc_c);
+	ATF_CHECK_EQ(0, dtapi_state->cc_n);
+	ATF_CHECK_EQ(0, dtapi_state->cc_z);
+	ATF_CHECK_EQ(0, dtapi_state->cc_v);
+	ATF_CHECK_EQ(0, dtapi_state->cc_c);
 
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[1] = 0;
+	dtapi_op_tst(dtapi_conf, 0, &err);
 
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
+	dtapi_state = dtapi_getstate(dtapi_conf);
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(0, estate->dtes_cc_n);
-	ATF_CHECK_EQ(1, estate->dtes_cc_z);
-	ATF_CHECK_EQ(0, estate->dtes_cc_v);
-	ATF_CHECK_EQ(0, estate->dtes_cc_c);
+	ATF_CHECK_EQ(0, dtapi_state->cc_n);
+	ATF_CHECK_EQ(1, dtapi_state->cc_z);
+	ATF_CHECK_EQ(0, dtapi_state->cc_v);
+	ATF_CHECK_EQ(0, dtapi_state->cc_c);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_BA);
