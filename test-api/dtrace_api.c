@@ -308,6 +308,27 @@ dtapi_op_ba(dtapi_conf_t *conf, uint_t where, int *err)
 	return (dtapi_branch_op(conf, where, err, DIF_OP_BA));
 }
 
+uint_t
+dtapi_op_be(dtapi_conf_t *conf, uint_t where, int *err)
+{
+
+	return (dtapi_branch_op(conf, where, err, DIF_OP_BE));
+}
+
+uint_t
+dtapi_op_bne(dtapi_conf_t *conf, uint_t where, int *err)
+{
+
+	return (dtapi_branch_op(conf, where, err, DIF_OP_BNE));
+}
+
+uint_t
+dtapi_op_bg(dtapi_conf_t *conf, uint_t where, int *err)
+{
+
+	return (dtapi_branch_op(conf, where, err, DIF_OP_BG));
+}
+
 size_t
 dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 {
