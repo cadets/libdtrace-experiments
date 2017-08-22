@@ -8,12 +8,21 @@
 struct dtapi_conf;
 typedef struct dtapi_conf dtapi_conf_t;
 
+typedef struct dtapi_state {
+	int64_t	cc_r;
+	uint8_t	cc_c;
+	uint8_t	cc_n;
+	uint8_t	cc_v;
+	uint8_t	cc_z;
+} dtapi_state_t;
+
 /*
  * DTrace API initialization and deinitialization
  */
 dtapi_conf_t *	dtapi_init(size_t, size_t, uint32_t);
 void		dtapi_deinit(dtapi_conf_t *);
 void		dtapi_set_textlen(dtapi_conf_t *, uint_t);
+dtapi_state_t *	dtapi_getstate(dtapi_conf_t *);
 
 /*
  * Low-level operations
@@ -34,6 +43,7 @@ uint64_t	dtapi_op_srem(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_urem(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_not(dtapi_conf_t *, uint64_t, int *);
 uint64_t	dtapi_op_mov(dtapi_conf_t *, uint64_t, int *);
+void		dtapi_op_cmp(dtapi_conf_t *, uint64_t, uint64_t, int *);
 
 /*
  * Subroutines
