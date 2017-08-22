@@ -2458,41 +2458,24 @@ ATF_TC_BODY(DIF_OP_SCMP_EQ, tc)
 	 * Test the SCMP operation of the DTrace machine when the two strings
 	 * are equal.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	int err;
+	dtapi_conf_t *dtapi_conf;
+	dtapi_state_t *dtapi_state;
 	const char *str1 = "foo";
 	const char *str2 = "foo";
+	int err;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	dtapi_op_scmp(dtapi_conf, (uintptr_t) str1, (uintptr_t) str2, &err);
 
-	state->dts_options[DTRACEOPT_STRSIZE] = 3;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[1] = (uintptr_t) str1;
-	estate->dtes_regs[2] = (uintptr_t) str2;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-
-	instr = DIF_INSTR_FMT(DIF_OP_SCMP, 1, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
+	dtapi_state = dtapi_getstate(dtapi_conf);
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(0, estate->dtes_cc_r);
-	ATF_CHECK_EQ(0, estate->dtes_cc_n);
-	ATF_CHECK_EQ(1, estate->dtes_cc_z);
-	ATF_CHECK_EQ(0, estate->dtes_cc_c);
-	ATF_CHECK_EQ(0, estate->dtes_cc_v);
+	ATF_CHECK_EQ(0, dtapi_state->cc_r);
+	ATF_CHECK_EQ(0, dtapi_state->cc_n);
+	ATF_CHECK_EQ(1, dtapi_state->cc_z);
+	ATF_CHECK_EQ(0, dtapi_state->cc_v);
+	ATF_CHECK_EQ(0, dtapi_state->cc_c);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_SCMP_STR1_GT_STR2);
@@ -2503,41 +2486,24 @@ ATF_TC_BODY(DIF_OP_SCMP_STR1_GT_STR2, tc)
 	 * string has a letter that is greater in ASCII value than the second
 	 * string.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	int err;
+	dtapi_conf_t *dtapi_conf;
+	dtapi_state_t *dtapi_state;
 	const char *str1 = "foo";
 	const char *str2 = "eoo";
+	int err;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	dtapi_op_scmp(dtapi_conf, (uintptr_t) str1, (uintptr_t) str2, &err);
 
-	state->dts_options[DTRACEOPT_STRSIZE] = 3;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[1] = (uintptr_t) str1;
-	estate->dtes_regs[2] = (uintptr_t) str2;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-
-	instr = DIF_INSTR_FMT(DIF_OP_SCMP, 1, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
+	dtapi_state = dtapi_getstate(dtapi_conf);
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(('f' - 'e'), estate->dtes_cc_r);
-	ATF_CHECK_EQ(('f' - 'e') < 0, estate->dtes_cc_n);
-	ATF_CHECK_EQ(('f' - 'e') == 0, estate->dtes_cc_z);
-	ATF_CHECK_EQ(0, estate->dtes_cc_c);
-	ATF_CHECK_EQ(0, estate->dtes_cc_v);
+	ATF_CHECK_EQ(('f' - 'e'), dtapi_state->cc_r);
+	ATF_CHECK_EQ(('f' - 'e') < 0, dtapi_state->cc_n);
+	ATF_CHECK_EQ(('f' - 'e') == 0, dtapi_state->cc_z);
+	ATF_CHECK_EQ(0, dtapi_state->cc_v);
+	ATF_CHECK_EQ(0, dtapi_state->cc_c);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_SCMP_STR1_LT_STR2);
@@ -2548,41 +2514,24 @@ ATF_TC_BODY(DIF_OP_SCMP_STR1_LT_STR2, tc)
 	 * string has a letter that is lesser in ASCII value than the second
 	 * string.
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	int err;
+	dtapi_conf_t *dtapi_conf;
+	dtapi_state_t *dtapi_state;
 	const char *str1 = "eoo";
 	const char *str2 = "foo";
+	int err;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
+	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
+	dtapi_op_scmp(dtapi_conf, (uintptr_t) str1, (uintptr_t) str2, &err);
 
-	state->dts_options[DTRACEOPT_STRSIZE] = 3;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[1] = (uintptr_t) str1;
-	estate->dtes_regs[2] = (uintptr_t) str2;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-
-	instr = DIF_INSTR_FMT(DIF_OP_SCMP, 1, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
+	dtapi_state = dtapi_getstate(dtapi_conf);
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(('e' - 'f'), estate->dtes_cc_r);
-	ATF_CHECK_EQ(('e' - 'f') < 0, estate->dtes_cc_n);
-	ATF_CHECK_EQ(('e' - 'f') == 0, estate->dtes_cc_z);
-	ATF_CHECK_EQ(0, estate->dtes_cc_c);
-	ATF_CHECK_EQ(0, estate->dtes_cc_v);
+	ATF_CHECK_EQ(('e' - 'f'), dtapi_state->cc_r);
+	ATF_CHECK_EQ(('e' - 'f') < 0, dtapi_state->cc_n);
+	ATF_CHECK_EQ(('e' - 'f') == 0, dtapi_state->cc_z);
+	ATF_CHECK_EQ(0, dtapi_state->cc_v);
+	ATF_CHECK_EQ(0, dtapi_state->cc_c);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_SCMP_FAIL);
@@ -2594,41 +2543,24 @@ ATF_TC_BODY(DIF_OP_SCMP_FAIL, tc)
 	 * string will only be compared partially (i.e., up to a point of
 	 * dts_options[DTRACEOPT_STRSIZE].
 	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	int err;
+	dtapi_conf_t *dtapi_conf;
+	dtapi_state_t *dtapi_state;
 	const char *str1 = "foooooooooooooooo";
 	const char *str2 = "foooobaaaaaaaaaar";
+	int err;
 
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
+	dtapi_conf = dtapi_init(100, 5, DTRACE_ACCESS_KERNEL);
+	dtapi_op_scmp(dtapi_conf, (uintptr_t) str1, (uintptr_t) str2, &err);
 
-	state->dts_options[DTRACEOPT_STRSIZE] = 5;
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_regs[1] = (uintptr_t) str1;
-	estate->dtes_regs[2] = (uintptr_t) str2;
-	mstate->dtms_access |= DTRACE_ACCESS_KERNEL;
-
-	instr = DIF_INSTR_FMT(DIF_OP_SCMP, 1, 2, 3);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
+	dtapi_state = dtapi_getstate(dtapi_conf);
 	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(0, estate->dtes_cc_r);
-	ATF_CHECK_EQ(0, estate->dtes_cc_n);
-	ATF_CHECK_EQ(1, estate->dtes_cc_z);
-	ATF_CHECK_EQ(0, estate->dtes_cc_c);
-	ATF_CHECK_EQ(0, estate->dtes_cc_v);
+	ATF_CHECK_EQ(0, dtapi_state->cc_r);
+	ATF_CHECK_EQ(0, dtapi_state->cc_n);
+	ATF_CHECK_EQ(1, dtapi_state->cc_z);
+	ATF_CHECK_EQ(0, dtapi_state->cc_v);
+	ATF_CHECK_EQ(0, dtapi_state->cc_c);
 
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
+	dtapi_deinit(dtapi_conf);
 }
 
 ATF_TC_WITHOUT_HEAD(DIF_OP_SETX);

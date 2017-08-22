@@ -258,6 +258,19 @@ dtapi_op_cmp(dtapi_conf_t *conf, uint64_t r1_val,
 }
 
 void
+dtapi_op_scmp(dtapi_conf_t *conf, uintptr_t r1_val,
+    uintptr_t r2_val, int *err)
+{
+
+	(void) dtapi_reg_op(conf, 1, 2, 0, r1_val, r2_val, err, DIF_OP_SCMP);
+	conf->dstate->cc_r = conf->estate->dtes_cc_r;
+	conf->dstate->cc_c = conf->estate->dtes_cc_c;
+	conf->dstate->cc_z = conf->estate->dtes_cc_z;
+	conf->dstate->cc_n = conf->estate->dtes_cc_n;
+	conf->dstate->cc_v = conf->estate->dtes_cc_v;
+}
+
+void
 dtapi_op_tst(dtapi_conf_t *conf, uint64_t r1_val, int *err)
 {
 	(void) dtapi_reg_op(conf, 1, 0, 0, r1_val, 0, err, DIF_OP_TST);
