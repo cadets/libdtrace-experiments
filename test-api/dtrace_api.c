@@ -329,6 +329,13 @@ dtapi_op_bg(dtapi_conf_t *conf, uint_t where, int *err)
 	return (dtapi_branch_op(conf, where, err, DIF_OP_BG));
 }
 
+uint_t
+dtapi_op_bgu(dtapi_conf_t *conf, uint_t where, int *err)
+{
+
+	return (dtapi_branch_op(conf, where, err, DIF_OP_BGU));
+}
+
 size_t
 dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 {
