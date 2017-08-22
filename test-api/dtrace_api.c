@@ -281,6 +281,33 @@ dtapi_op_tst(dtapi_conf_t *conf, uint64_t r1_val, int *err)
 	conf->dstate->cc_v = conf->estate->dtes_cc_v;
 }
 
+static uint_t
+dtapi_branch_op(dtapi_conf_t *conf, uint_t where, int *err, uint16_t op)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	instr = DIF_INSTR_BRANCH(op, where);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	return (estate->dtes_pc);
+}
+
+uint_t
+dtapi_op_ba(dtapi_conf_t *conf, uint_t where, int *err)
+{
+
+	return (dtapi_branch_op(conf, where, err, DIF_OP_BA));
+}
+
 size_t
 dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 {
@@ -294,8 +321,6 @@ dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 	vstate = conf->vstate;
 	state = conf->state;
 	estate = conf->estate;
-
-	state->dts_options[DTRACEOPT_STRSIZE] = 20;
 
 	estate->dtes_regs[3] = (uint64_t) s;
 

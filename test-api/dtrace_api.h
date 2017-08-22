@@ -46,6 +46,7 @@ uint64_t	dtapi_op_mov(dtapi_conf_t *, uint64_t, int *);
 void		dtapi_op_cmp(dtapi_conf_t *, uint64_t, uint64_t, int *);
 void		dtapi_op_scmp(dtapi_conf_t *, uintptr_t, uintptr_t, int *);
 void		dtapi_op_tst(dtapi_conf_t *, uint64_t, int *);
+uint_t		dtapi_op_ba(dtapi_conf_t *, uint_t, int *);
 
 /*
  * Subroutines
