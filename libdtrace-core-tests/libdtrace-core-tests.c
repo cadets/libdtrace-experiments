@@ -1064,40 +1064,6 @@ ATF_TC_BODY(DIF_OP_BGEU, tc)
 	dtapi_deinit(dtapi_conf);
 }
 
-ATF_TC_WITHOUT_HEAD(DIF_OP_BGEU_FAIL);
-ATF_TC_BODY(DIF_OP_BGEU_FAIL, tc)
-{
-	/*
-	 * Test the BGEU operation of the DTrace machine when it doesn't branch.
-	 */
-	dtrace_mstate_t *mstate;
-	dtrace_vstate_t *vstate;
-	dtrace_state_t *state;
-	dtrace_estate_t *estate;
-	dif_instr_t instr;
-	int err;
-
-	mstate = calloc(1, sizeof (dtrace_mstate_t));
-	vstate = calloc(1, sizeof (dtrace_vstate_t));
-	state = calloc(1, sizeof (dtrace_state_t));
-	estate = calloc(1, sizeof (dtrace_estate_t));
-
-	estate->dtes_regs[DIF_REG_R0] = 0;
-	estate->dtes_pc = 0;
-	estate->dtes_cc_c = 1;
-
-	instr = DIF_INSTR_BRANCH(DIF_OP_BGEU, 0xD06E);
-	err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
-
-	ATF_CHECK_EQ(0, err);
-	ATF_CHECK_EQ(0, estate->dtes_pc);
-
-	free(mstate);
-	free(vstate);
-	free(state);
-	free(estate);
-}
-
 ATF_TC_WITHOUT_HEAD(DIF_OP_BL_SUCCESS_POS);
 ATF_TC_BODY(DIF_OP_BL_SUCCESS_POS, tc)
 {
