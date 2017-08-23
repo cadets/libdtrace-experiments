@@ -54,6 +54,7 @@ uint_t		dtapi_op_bgu(dtapi_conf_t *, uint_t, int *);
 uint_t		dtapi_op_bge(dtapi_conf_t *, uint_t, int *);
 uint_t		dtapi_op_bgeu(dtapi_conf_t *, uint_t, int *);
 uint_t		dtapi_op_bl(dtapi_conf_t *, uint_t, int *);
+uint_t		dtapi_op_blu(dtapi_conf_t *, uint_t, int *);
 
 /*
  * Subroutines
