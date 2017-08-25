@@ -1,8 +1,0 @@
-#!/bin/sh		
-
-TESTS=$(ls libdtrace-core-fuzz/ | grep -v Makefile | sed 's/\///')		
-
-for t in ${TESTS}; do		
-	echo "Spawning fuzz: $t"		
- 	tmux neww make fuzz FUZZ=$t 
-done		
