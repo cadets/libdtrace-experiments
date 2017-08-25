@@ -27,7 +27,7 @@ main(void)
 
 	if (sz != 1 ||
 	    strcmp("dtrace", provs) != 0) {
-		printf("dtrace_providers returned wrong values: (%d, %s)\n",
+		printf("dtrace_providers returned wrong values: (%zu, %s)\n",
 		    sz, provs);
 		return (1);
 	}
