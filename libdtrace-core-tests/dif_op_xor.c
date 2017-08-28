@@ -7,6 +7,8 @@
 #include "../libdtrace-core/dtrace_impl.h"
 #include "../test-api/dtrace_api.h"
 
+#include "dtcheck.h"
+
 int
 main(void)
 {
@@ -24,15 +26,8 @@ main(void)
 	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
 	rd = dtapi_op_xor(dtapi_conf, r1, r2, &err);
 
-	if (err) {
-		printf("XOR failed: %s\n", strerror(err));
-		return (1);
-	}
-
-	if (rd != 0xD06F00D) {
-		printf("rd (%#lx) != 0xD06F00D\n", rd);
-		return (1);
-	}
+	DTCHECK(err, ("XOR failed: %s\n", strerror(err)));
+	DTCHECK(rd != 0xD06F00D, ("rd (%#lx) != 0xD06F00D\n", rd));
 
 	dtapi_deinit(dtapi_conf);
 	return (0);

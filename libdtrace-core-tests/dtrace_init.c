@@ -7,6 +7,8 @@
 #include "../libdtrace-core/dtrace_impl.h"
 #include "../test-api/dtrace_api.h"
 
+#include "dtcheck.h"
+
 int
 main(void)
 {
@@ -16,10 +18,7 @@ main(void)
 	int err;
 
 	err = dtrace_init();
-	if (err) {
-		printf("DTrace not properly initialized: %s\n", strerror(err));
-		return (1);
-	}
+	DTCHECK(err, ("DTrace not properly initialized: %s\n", strerror(err)));
 
 	return (0);
 }

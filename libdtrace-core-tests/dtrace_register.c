@@ -7,6 +7,8 @@
 #include "../libdtrace-core/dtrace_impl.h"
 #include "../test-api/dtrace_api.h"
 
+#include "dtcheck.h"
+
 static void
 dtrace_nullop(void)
 {}
@@ -44,47 +46,25 @@ main(void)
 	char (*provs)[DTRACE_PROVNAMELEN];
 
 	err = dtrace_init();
-	if (err) {
-		printf("DTrace not properly initialized: %s\n", strerror(err));
-		return (1);
-	}
+	DTCHECK(err, ("DTrace not properly initialized: %s\n", strerror(err)));
 
 	err = dtrace_register("test_provider", &test_provider_attr,
 	    DTRACE_PRIV_NONE, 0, &test_provider_ops, NULL, &id);
-	if (err) {
-		printf("Failed to register a provider: %s\n", strerror(err));
-		return (1);
-	}
+	DTCHECK(err, ("Failed to register a provider: %s\n", strerror(err)));
 
 	provs = (char (*)[DTRACE_PROVNAMELEN]) dtrace_providers(&sz);
-	if (sz != 2) {
-		printf("Too many providers: %zu\n", sz);
-		return (1);
-	}
 
-	if (strcmp("dtrace", provs[0]) != 0) {
-		printf("The first provider is not dtrace: %s\n", provs[0]);
-		return (1);
-	}
-
-	if (strcmp("test_provider", provs[1]) != 0) {
-		printf("The second provider is not test_provider: %s\n",
-		    provs[1]);
-		return (1);
-	}
+	DTCHECK(sz != 2, ("Too many providers: %zu\n", sz));
+	DTCHECKSTR("dtrace", provs[0],
+	    ("The first provider is not dtrace: %s\n", provs[0]));
+	DTCHECKSTR("test_provider", provs[1],
+	    ("The second provider is not test_provider: %s\n", provs[1]));
 
 	err = dtrace_unregister(id);
-	if (err) {
-		printf("Failed to unregister a provider: %s\n", strerror(err));
-		return (1);
-	}
+	DTCHECK(err, ("Failed to unregister a provider: %s\n", strerror(err)));
 
 	err = dtrace_deinit();
-	if (err) {
-		printf("DTrace not properly deinitialized: %s\n", strerror(err));
-		return (1);
-	}
-
+	DTCHECK(err, ("DTrace not properly deinitialized: %s\n", strerror(err)));
 	return (0);
 }
 

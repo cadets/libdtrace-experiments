@@ -7,6 +7,8 @@
 #include "../libdtrace-core/dtrace_impl.h"
 #include "../test-api/dtrace_api.h"
 
+#include "dtcheck.h"
+
 int
 main(void)
 {
@@ -18,25 +20,16 @@ main(void)
 	int err;
 
 	err = dtrace_init();
-	if (err != 0) {
-		printf("DTrace not properly initialized: %s\n", strerror(err));
-		return (1);
-	}
+	DTCHECK(err, ("DTrace not properly initialized: %s\n", strerror(err)));
 
 	provs = dtrace_providers(&sz);
 
-	if (sz != 1 ||
-	    strcmp("dtrace", provs) != 0) {
-		printf("dtrace_providers returned wrong values: (%zu, %s)\n",
-		    sz, provs);
-		return (1);
-	}
+	DTCHECK(sz != 1, ("Too many providers: %zu\n", sz));
+	DTCHECKSTR("dtrace", provs,
+	    ("Expected dtrace provider: %s\n", provs));
 
 	err = dtrace_deinit();
-	if (err != 0) {
-		printf("DTrace not properly deinitialized: %s\n", strerror(err));
-		return (1);
-	}
+	DTCHECK(err, ("DTrace not properly deinitialized: %s\n", strerror(err)));
 
 	return (0);
 }

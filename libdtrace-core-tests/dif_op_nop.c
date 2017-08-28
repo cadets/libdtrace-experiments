@@ -7,6 +7,8 @@
 #include "../libdtrace-core/dtrace_impl.h"
 #include "../test-api/dtrace_api.h"
 
+#include "dtcheck.h"
+
 int
 main(void)
 {
@@ -18,10 +20,7 @@ main(void)
 
 	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
 	dtapi_op_nop(dtapi_conf, &err);
-	if (err) {
-		printf("NOP failed: %s\n", strerror(err));
-		return (1);
-	}
+	DTCHECK(err, ("NOP failed: %s\n", strerror(err)));
 
 	dtapi_deinit(dtapi_conf);
 

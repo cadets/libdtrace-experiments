@@ -7,6 +7,8 @@
 #include "../libdtrace-core/dtrace_impl.h"
 #include "../test-api/dtrace_api.h"
 
+#include "dtcheck.h"
+
 int
 main(void)
 {
@@ -22,27 +24,13 @@ main(void)
 	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
 	rd = dtapi_op_add(dtapi_conf, 100, 50, &err);
 
-	if (err) {
-		printf("ADD failed: %s\n", strerror(err));
-		return (1);
-	}
-
-	if (rd != 150) {
-		printf("rd (%lu) != 150\n", rd);
-		return (1);
-	}
+	DTCHECK(err, ("ADD failed: %s\n", strerror(err)));
+	DTCHECK(rd != 150, ("rd (%lu) != 150\n", rd));
 
 	rd = dtapi_op_add(dtapi_conf, 0xFFFFFFFFFFFFFFFF, 1, &err);
 
-	if (err) {
-		printf("ADD failed: %s\n", strerror(err));
-		return (1);
-	}
-
-	if (rd != 0) {
-		printf("rd (%lu) != 0\n", rd);
-		return (1);
-	}
+	DTCHECK(err, ("ADD failed: %s\n", strerror(err)));
+	DTCHECK(rd != 0, ("rd (%lu) != 0\n", rd));
 
 	dtapi_deinit(dtapi_conf);
 	return (0);
