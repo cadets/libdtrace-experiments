@@ -39,7 +39,7 @@ main(void)
 
 	pc = dtapi_op_ble(dtapi_conf, 0, &err);
 	DTCHECK(err, ("BLE failed: %s\n", strerror(err)));
-	DTCHECK(pc != 0, ("pc (%u) != 1234\n", pc));
+	DTCHECK(pc != 0, ("pc (%u) != 0\n", pc));
 
 	dtapi_op_cmp(dtapi_conf, -7, 7, &err);
 	DTCHECK(err, ("CMP failed: %s\n", strerror(err)));
