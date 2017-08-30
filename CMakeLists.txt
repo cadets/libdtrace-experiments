@@ -8,20 +8,20 @@ find_library(
 )
 
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libdtrace-core-tests)
-set(FILECHECK_TEST_DIR ${TEST_DIR}/compiler)
+set(FILECHECK_TEST_DIR ${TEST_DIR}/filecheck-tests)
 
 file(
 	GLOB
 	TEST_SRCS
 	RELATIVE ${TEST_DIR}
-	libdtrace-core-tests/*.c
+	${TEST_DIR}/*.c
 )
 
 file(
 	GLOB
 	FILECHECK_TEST_SRCS
 	RELATIVE ${FILECHECK_TEST_DIR}
-	libdtrace-core-tests/compiler/*.d
+	${FILECHECK_TEST_DIR}/*.d
 )
 
 add_definitions(-D_DTRACE_TESTS)
@@ -47,7 +47,7 @@ if(FILECHECK STREQUAL "FILECHECK-NOTFOUND")
 	message(WARNING "FileCheck not found, disabling FileCheck tests")
 	message(WARNING "Set FILECHECK to the path to FileCheck to enable them")
 else()
-	set(FILECHECK_TESTS ${TESTS}/compiler)
+	set(FILECHECK_TESTS ${TESTS}/filecheck-tests)
 	foreach(filecheck_test ${FILECHECK_TEST_SRCS})
 		get_filename_component(
 			filecheck_test_name

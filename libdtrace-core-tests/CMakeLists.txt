@@ -23,4 +23,4 @@ foreach(test_source ${TEST_SRCS})
 	)
 endforeach(test_source)
 
-add_subdirectory(compiler)
+add_subdirectory(filecheck-tests)
