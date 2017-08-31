@@ -1,5 +1,0 @@
-
-DIFO 0x0x800f51230 returns D type (integer) (size 4)
-OFF OPCODE      INSTRUCTION
-00: 25000001    setx DT_INTEGER[0], %r1		! 0x0
-01: 23000001    ret  %r1

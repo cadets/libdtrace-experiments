@@ -1,8 +1,8 @@
 BEGIN
 {
 /*
- * CHECK: setx DT_INTEGER[0], %r1 ! 0x0
- * CHECK-NEXT: ret %r1
+ * CHECK: setx %rd, 0 ! 0x0
+ * CHECK-NEXT: ret %rd
  */
 	trace(0);
 }
