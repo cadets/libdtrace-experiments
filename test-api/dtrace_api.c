@@ -378,6 +378,77 @@ dtapi_op_bleu(dtapi_conf_t *conf, uint_t where, int *err)
 	return (dtapi_branch_op(conf, where, err, DIF_OP_BLEU));
 }
 
+static uint64_t
+dtapi_op_load(dtapi_conf_t *conf, uint64_t var, int *err, uint16_t op)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	estate->dtes_regs[1] = (uintptr_t) &var;
+
+	instr = DIF_INSTR_LOAD(op, 1, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	return (estate->dtes_regs[3]);
+}
+
+uint64_t
+dtapi_op_ldsb(dtapi_conf_t *conf, int8_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_LDSB));
+}
+
+uint64_t
+dtapi_op_ldsh(dtapi_conf_t *conf, int16_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_LDSH));
+}
+
+uint64_t
+dtapi_op_ldsw(dtapi_conf_t *conf, int32_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_LDSW));
+}
+
+uint64_t
+dtapi_op_ldub(dtapi_conf_t *conf, uint8_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_LDUB));
+}
+
+uint64_t
+dtapi_op_lduh(dtapi_conf_t *conf, uint16_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_LDUH));
+}
+
+uint64_t
+dtapi_op_lduw(dtapi_conf_t *conf, uint32_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_LDUW));
+}
+
+uint64_t
+dtapi_op_ldx(dtapi_conf_t *conf, uint64_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_LDX));
+}
+
 size_t
 dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 {

@@ -57,6 +57,13 @@ uint_t		dtapi_op_bl(dtapi_conf_t *, uint_t, int *);
 uint_t		dtapi_op_blu(dtapi_conf_t *, uint_t, int *);
 uint_t		dtapi_op_ble(dtapi_conf_t *, uint_t, int *);
 uint_t		dtapi_op_bleu(dtapi_conf_t *, uint_t, int *);
+uint64_t	dtapi_op_ldsb(dtapi_conf_t *, int8_t, int *);
+uint64_t	dtapi_op_ldsh(dtapi_conf_t *, int16_t, int *);
+uint64_t	dtapi_op_ldsw(dtapi_conf_t *, int32_t, int *);
+uint64_t	dtapi_op_ldub(dtapi_conf_t *, uint8_t, int *);
+uint64_t	dtapi_op_lduh(dtapi_conf_t *, uint16_t, int *);
+uint64_t	dtapi_op_lduw(dtapi_conf_t *, uint32_t, int *);
+uint64_t	dtapi_op_ldx(dtapi_conf_t *, uint64_t, int *);
 
 /*
  * Subroutines
