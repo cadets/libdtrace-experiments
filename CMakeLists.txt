@@ -57,7 +57,7 @@ else()
 		add_test(
 			${filecheck_test_name}
 			"${FILECHECK_TEST_DIR}/testfilecheck.sh"
-			"${FILECHECK_TESTS}/compiler"
+			"dtrace -S -e -s"
 			"${FILECHECK_TEST_DIR}/${filecheck_test}"
 		)
 	endforeach()
