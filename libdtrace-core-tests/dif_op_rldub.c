@@ -13,7 +13,7 @@ int
 main(void)
 {
 	/*
-	 * Test the LDUB operation of the DTrace machine.
+	 * Test the RLDUB operation of the DTrace machine.
 	 */
 	dtapi_conf_t *dtapi_conf;
 	int err;
@@ -23,9 +23,9 @@ main(void)
 	var = 73;
 
 	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
-	rd = dtapi_op_ldub(dtapi_conf, var, &err);
+	rd = dtapi_op_rldub(dtapi_conf, var, &err);
 
-	DTCHECK(err, ("LDUB failed: %s\n", strerror(err)));
+	DTCHECK(err, ("RLDUB failed: %s\n", strerror(err)));
 	DTCHECK(rd != 73,
 	    ("rd (%lu) != 73\n", rd));
 
@@ -33,9 +33,9 @@ main(void)
 #pragma clang diagnostic ignored "-Wconstant-conversion"
 	var = 256;
 #pragma clang diagnostic pop
-	rd = dtapi_op_ldub(dtapi_conf, var, &err);
+	rd = dtapi_op_rldub(dtapi_conf, var, &err);
 
-	DTCHECK(err, ("LDUB failed: %s\n", strerror(err)));
+	DTCHECK(err, ("RLDUB failed: %s\n", strerror(err)));
 	DTCHECK(rd != 0,
 	    ("rd (%lu) != 0\n", rd));
 

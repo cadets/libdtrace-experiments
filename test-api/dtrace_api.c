@@ -449,6 +449,55 @@ dtapi_op_ldx(dtapi_conf_t *conf, uint64_t var, int *err)
 	return (dtapi_op_load(conf, var, err, DIF_OP_LDX));
 }
 
+uint64_t
+dtapi_op_rldsb(dtapi_conf_t *conf, int8_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_RLDSB));
+}
+
+uint64_t
+dtapi_op_rldsh(dtapi_conf_t *conf, int16_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_RLDSH));
+}
+
+uint64_t
+dtapi_op_rldsw(dtapi_conf_t *conf, int32_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_RLDSW));
+}
+
+uint64_t
+dtapi_op_rldub(dtapi_conf_t *conf, uint8_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_RLDUB));
+}
+
+uint64_t
+dtapi_op_rlduh(dtapi_conf_t *conf, uint16_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_RLDUH));
+}
+
+uint64_t
+dtapi_op_rlduw(dtapi_conf_t *conf, uint32_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_RLDUW));
+}
+
+uint64_t
+dtapi_op_rldx(dtapi_conf_t *conf, uint64_t var, int *err)
+{
+
+	return (dtapi_op_load(conf, var, err, DIF_OP_RLDX));
+}
+
 size_t
 dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 {

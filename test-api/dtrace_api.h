@@ -64,6 +64,13 @@ uint64_t	dtapi_op_ldub(dtapi_conf_t *, uint8_t, int *);
 uint64_t	dtapi_op_lduh(dtapi_conf_t *, uint16_t, int *);
 uint64_t	dtapi_op_lduw(dtapi_conf_t *, uint32_t, int *);
 uint64_t	dtapi_op_ldx(dtapi_conf_t *, uint64_t, int *);
+uint64_t	dtapi_op_rldsb(dtapi_conf_t *, int8_t, int *);
+uint64_t	dtapi_op_rldsh(dtapi_conf_t *, int16_t, int *);
+uint64_t	dtapi_op_rldsw(dtapi_conf_t *, int32_t, int *);
+uint64_t	dtapi_op_rldub(dtapi_conf_t *, uint8_t, int *);
+uint64_t	dtapi_op_rlduh(dtapi_conf_t *, uint16_t, int *);
+uint64_t	dtapi_op_rlduw(dtapi_conf_t *, uint32_t, int *);
+uint64_t	dtapi_op_rldx(dtapi_conf_t *, uint64_t, int *);
 
 /*
  * Subroutines

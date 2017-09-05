@@ -17,27 +17,32 @@ main(void)
 	 */
 	dtapi_conf_t *dtapi_conf;
 	int err;
-	uint32_t var;
+	uint16_t var;
 	uint64_t rd;
 
 	var = 73;
 
 	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
-	rd = dtapi_op_lduh(dtapi_conf, (uint16_t) var, &err);
+	rd = dtapi_op_lduh(dtapi_conf, var, &err);
 
 	DTCHECK(err, ("LDUH failed: %s\n", strerror(err)));
 	DTCHECK(rd != 73,
 	    ("rd (%lu) != 73\n", rd));
 
 	var = 256;
-	rd = dtapi_op_lduh(dtapi_conf, (uint16_t) var, &err);
+	rd = dtapi_op_lduh(dtapi_conf, var, &err);
 
 	DTCHECK(err, ("LDUH failed: %s\n", strerror(err)));
 	DTCHECK(rd != 256,
 	    ("rd (%lu) != 256\n", rd));
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wshift-count-overflow"
+#pragma clang diagnostic ignored "-Wconstant-conversion"
 	var = 1 << 16;
-	rd = dtapi_op_lduh(dtapi_conf, (uint16_t) var, &err);
+#pragma clang diagnostic pop
+
+	rd = dtapi_op_lduh(dtapi_conf, var, &err);
 
 	DTCHECK(err, ("LDUH failed: %s\n", strerror(err)));
 	DTCHECK(rd != 0,
