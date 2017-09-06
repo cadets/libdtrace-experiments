@@ -13,7 +13,7 @@ int
 main(void)
 {
 	/*
-	 * Test the PUSHTV operation of the DTrace machine.
+	 * Test the FLUSHTS operation of the DTrace machine.
 	 */
 	dtapi_conf_t *dtapi_conf;
 	int err;
@@ -22,6 +22,12 @@ main(void)
 
 	dtapi_op_pushtv(dtapi_conf, 0xFF, &err);
 	DTCHECK(err, ("PUSHTV failed: %s\n", strerror(err)));
+
+	dtapi_op_pushtv(dtapi_conf, 0xFF, &err);
+	DTCHECK(err, ("PUSHTV failed: %s\n", strerror(err)));
+
+	dtapi_op_flushts(dtapi_conf, &err);
+	DTCHECK(err, ("FLUSHTS failed: %s\n", strerror(err)));
 	dtapi_deinit(dtapi_conf);
 
 	return (0);
