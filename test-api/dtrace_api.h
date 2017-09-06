@@ -78,6 +78,7 @@ uint64_t	dtapi_op_setx(dtapi_conf_t *, uint64_t, int *);
 uint64_t	dtapi_op_sets(dtapi_conf_t *, uint64_t, int *);
 void		dtapi_op_pushtr(dtapi_conf_t *,
     		    uint8_t, uint64_t, uint64_t, int *);
+void		dtapi_op_pushtv(dtapi_conf_t *, uint64_t, int *);
 
 /*
  * Subroutines

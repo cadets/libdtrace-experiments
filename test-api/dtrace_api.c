@@ -585,6 +585,26 @@ dtapi_op_pushtr(dtapi_conf_t *conf, uint8_t type,
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 }
 
+void
+dtapi_op_pushtv(dtapi_conf_t *conf, uint64_t val, int *err)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	estate->dtes_regs[3] = val;
+
+	instr = DIF_INSTR_FMT(DIF_OP_PUSHTV, 0, 0, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+}
+
 size_t
 dtapi_strlen(dtapi_conf_t *conf, const char *s, int *err)
 {

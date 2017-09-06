@@ -20,8 +20,8 @@ main(void)
 
 	dtapi_conf = dtapi_init(100, 32, DTRACE_ACCESS_KERNEL);
 
-	dtapi_op_pushtr(dtapi_conf, 0, 4, 0xFF, &err);
-	DTCHECK(err, ("PUSHTR failed: %s\n", strerror(err)));
+	dtapi_op_pushtv(dtapi_conf, 0xFF, &err);
+	DTCHECK(err, ("PUSHTV failed: %s\n", strerror(err)));
 	dtapi_deinit(dtapi_conf);
 
 	return (0);
