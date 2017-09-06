@@ -9,6 +9,8 @@
 
 #include "dtrace_api.h"
 
+#define	INTTAB_SIZE	100
+
 struct dtapi_conf {
 	dtrace_mstate_t *mstate;
 	dtrace_vstate_t *vstate;
@@ -21,7 +23,8 @@ struct dtapi_conf {
  * Currently we just assume kernel access.
  */
 dtapi_conf_t *
-dtapi_init(size_t scratch_size, size_t strsize, uint32_t access)
+dtapi_init_full(size_t scratch_size, size_t strsize,
+    uint32_t access, const uint64_t *inttab, const char *strtab)
 {
 	dtapi_conf_t *conf;
 	char *scratch;
@@ -43,8 +46,17 @@ dtapi_init(size_t scratch_size, size_t strsize, uint32_t access)
 	conf->state->dts_options[DTRACEOPT_STRSIZE] = strsize;
 
 	conf->estate->dtes_regs[DIF_REG_R0] = 0;
+	conf->estate->dtes_inttab = inttab;
+	conf->estate->dtes_strtab = strtab;
 
 	return (conf);
+}
+
+dtapi_conf_t *
+dtapi_init(size_t scratch_size, size_t strsize, uint32_t access)
+{
+
+	return (dtapi_init_full(scratch_size, strsize, access, NULL, NULL));
 }
 
 void
@@ -496,6 +508,51 @@ dtapi_op_rldx(dtapi_conf_t *conf, uint64_t var, int *err)
 {
 
 	return (dtapi_op_load(conf, var, err, DIF_OP_RLDX));
+}
+
+uint64_t
+dtapi_op_setx(dtapi_conf_t *conf, uint64_t index, int *err)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	instr = DIF_INSTR_SETX(index, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	return (estate->dtes_regs[3]);
+}
+
+/*
+ * We keep SETX and SETS separated in the case where the virtual address is not
+ * a pointer, as it will allow us to more easily abstract that away without then
+ * having to break it up in two functions.
+ */
+uint64_t
+dtapi_op_sets(dtapi_conf_t *conf, uint64_t index, int *err)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	instr = DIF_INSTR_SETS(index, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	return (estate->dtes_regs[3]);
 }
 
 size_t

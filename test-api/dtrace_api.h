@@ -19,6 +19,8 @@ typedef struct dtapi_state {
 /*
  * DTrace API initialization and deinitialization
  */
+dtapi_conf_t *	dtapi_init_full(size_t, size_t,
+             	    uint32_t, const uint64_t *, const char *);
 dtapi_conf_t *	dtapi_init(size_t, size_t, uint32_t);
 void		dtapi_deinit(dtapi_conf_t *);
 void		dtapi_set_textlen(dtapi_conf_t *, uint_t);
@@ -71,6 +73,8 @@ uint64_t	dtapi_op_rldub(dtapi_conf_t *, uint8_t, int *);
 uint64_t	dtapi_op_rlduh(dtapi_conf_t *, uint16_t, int *);
 uint64_t	dtapi_op_rlduw(dtapi_conf_t *, uint32_t, int *);
 uint64_t	dtapi_op_rldx(dtapi_conf_t *, uint64_t, int *);
+uint64_t	dtapi_op_setx(dtapi_conf_t *, uint64_t, int *);
+uint64_t	dtapi_op_sets(dtapi_conf_t *, uint64_t, int *);
 
 /*
  * Subroutines
