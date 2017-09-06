@@ -23,7 +23,7 @@ main(void)
 	rd = NULL;
 
 	rd = dtapi_toupper(dtapi_conf, "HEllO WoRlD", &err);
-	DTCHECK(err, ("STRSTR failed: %s\n", strerror(err)));
+	DTCHECK(err, ("TOUPPER failed: %s\n", strerror(err)));
 	DTCHECK(strcmp("HELLO WORLD", rd) != 0,
 	    ("rd (%s) != HELLO WORLD\n", rd));
 

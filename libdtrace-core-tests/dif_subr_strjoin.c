@@ -13,7 +13,7 @@ int
 main(void)
 {
 	/*
-	 * Test the strtok() subroutine.
+	 * Test the strjoin() subroutine.
 	 */
 	dtapi_conf_t *dtapi_conf;
 	char *rd;
@@ -22,9 +22,10 @@ main(void)
 	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
 	rd = NULL;
 
-	rd = dtapi_strtok(dtapi_conf, "hello-world", "-", &err);
-	DTCHECK(err, ("STRTOK failed: %s\n", strerror(err)));
-	DTCHECK(strcmp("world", rd) != 0, ("rd (%s) != world", rd));
+	rd = dtapi_strjoin(dtapi_conf, "hello ", "world", &err);
+	DTCHECK(err, ("STRJOIN failed: %s\n", strerror(err)));
+	DTCHECK(strcmp("hello world", rd) != 0,
+	    ("rd (%s) != hello world\n", rd));
 
 	dtapi_deinit(dtapi_conf);
 	return (0);

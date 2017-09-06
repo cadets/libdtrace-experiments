@@ -23,7 +23,7 @@ main(void)
 	rd = NULL;
 
 	rd = dtapi_substr(dtapi_conf, "hello world", 0, 5, &err);
-	DTCHECK(err, ("STRSTR failed: %s\n", strerror(err)));
+	DTCHECK(err, ("SUBSTR failed: %s\n", strerror(err)));
 	DTCHECK(strcmp("hello", rd) != 0, ("rd (%s) != hello\n", rd));
 
 	dtapi_deinit(dtapi_conf);

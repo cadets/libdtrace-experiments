@@ -23,7 +23,7 @@ main(void)
 	rd = NULL;
 
 	rd = dtapi_tolower(dtapi_conf, "HEllO WoRlD", &err);
-	DTCHECK(err, ("STRSTR failed: %s\n", strerror(err)));
+	DTCHECK(err, ("TOLOWER :failed: %s\n", strerror(err)));
 	DTCHECK(strcmp("hello world", rd) != 0,
 	    ("rd (%s) != hello world\n", rd));
 
