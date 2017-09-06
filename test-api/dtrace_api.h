@@ -36,6 +36,7 @@ uint64_t	dtapi_op_xor(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_and(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_sll(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_srl(dtapi_conf_t *, uint64_t, uint64_t, int *);
+uint64_t	dtapi_op_sra(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_sub(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_add(dtapi_conf_t *, uint64_t, uint64_t, int *);
 uint64_t	dtapi_op_mul(dtapi_conf_t *, uint64_t, uint64_t, int *);
@@ -75,6 +76,8 @@ uint64_t	dtapi_op_rlduw(dtapi_conf_t *, uint32_t, int *);
 uint64_t	dtapi_op_rldx(dtapi_conf_t *, uint64_t, int *);
 uint64_t	dtapi_op_setx(dtapi_conf_t *, uint64_t, int *);
 uint64_t	dtapi_op_sets(dtapi_conf_t *, uint64_t, int *);
+void		dtapi_op_pushtr(dtapi_conf_t *,
+    		    uint8_t, uint64_t, uint64_t, int *);
 
 /*
  * Subroutines

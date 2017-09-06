@@ -20,7 +20,6 @@ main(void)
 	dtapi_conf_t *dtapi_conf;
 	uint64_t rd;
 	int err;
-	size_t i;
 	char *strtab;
 
 	strtab = malloc(N_ENTRIES * 32);

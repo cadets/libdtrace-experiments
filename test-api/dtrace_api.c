@@ -188,6 +188,14 @@ dtapi_op_srl(dtapi_conf_t *conf, uint64_t r1_val,
 }
 
 uint64_t
+dtapi_op_sra(dtapi_conf_t *conf, uint64_t r1_val,
+    uint64_t r2_val, int *err)
+{
+
+	return (dtapi_reg_op(conf, 1, 2, 3, r1_val, r2_val, err, DIF_OP_SRA));
+}
+
+uint64_t
 dtapi_op_sub(dtapi_conf_t *conf, uint64_t r1_val,
     uint64_t r2_val, int *err)
 {
@@ -553,6 +561,28 @@ dtapi_op_sets(dtapi_conf_t *conf, uint64_t index, int *err)
 	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	return (estate->dtes_regs[3]);
+}
+
+void
+dtapi_op_pushtr(dtapi_conf_t *conf, uint8_t type,
+    uint64_t size, uint64_t ptr, int *err)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	estate->dtes_regs[2] = size;
+	estate->dtes_regs[3] = ptr;
+
+	instr = DIF_INSTR_FMT(DIF_OP_PUSHTR, type, 2, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 }
 
 size_t
