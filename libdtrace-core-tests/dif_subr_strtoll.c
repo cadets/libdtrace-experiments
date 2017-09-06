@@ -22,35 +22,35 @@ main(void)
 	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
 
 	rd = dtapi_strtoll(dtapi_conf, "4123", &err);
-	DTCHECK(err, ("STRTOLL: failed: %s\n", strerror(err)));
+	DTCHECK(err, ("STRTOLL failed: %s\n", strerror(err)));
 	DTCHECK(rd != 4123, ("rd (%ld) != 4123\n", rd));
 
 	rd = dtapi_strtoll(dtapi_conf, "abc", &err);
-	DTCHECK(err, ("STRTOLL: failed: %s\n", strerror(err)));
+	DTCHECK(err, ("STRTOLL failed: %s\n", strerror(err)));
 	DTCHECK(rd != 0, ("rd (%ld) != 0\n", rd));
 
 	rd = dtapi_strtoll(dtapi_conf, "-1234", &err);
-	DTCHECK(err, ("STRTOLL: failed: %s\n", strerror(err)));
+	DTCHECK(err, ("STRTOLL failed: %s\n", strerror(err)));
 	DTCHECK(rd != -1234, ("rd (%ld) != -1234\n", rd));
 
 	rd = dtapi_strtoll(dtapi_conf, "-1234a", &err);
-	DTCHECK(err, ("STRTOLL: failed: %s\n", strerror(err)));
+	DTCHECK(err, ("STRTOLL failed: %s\n", strerror(err)));
 	DTCHECK(rd != -1234, ("rd (%ld) != 0\n", rd));
 
 	rd = dtapi_strtoll(dtapi_conf, "1234a", &err);
-	DTCHECK(err, ("STRTOLL: failed: %s\n", strerror(err)));
+	DTCHECK(err, ("STRTOLL failed: %s\n", strerror(err)));
 	DTCHECK(rd != 1234, ("rd (%ld) != 0\n", rd));
 
 	rd = dtapi_strtoll(dtapi_conf, "s1234", &err);
-	DTCHECK(err, ("STRTOLL: failed: %s\n", strerror(err)));
+	DTCHECK(err, ("STRTOLL failed: %s\n", strerror(err)));
 	DTCHECK(rd != 0, ("rd (%ld) != 0\n", rd));
 
 	rd = dtapi_strtoll(dtapi_conf, "12a34", &err);
-	DTCHECK(err, ("STRTOLL: failed: %s\n", strerror(err)));
+	DTCHECK(err, ("STRTOLL failed: %s\n", strerror(err)));
 	DTCHECK(rd != 12, ("rd (%ld) != 0\n", rd));
 
 	rd = dtapi_strtoll(dtapi_conf, "    12a34", &err);
-	DTCHECK(err, ("STRTOLL: failed: %s\n", strerror(err)));
+	DTCHECK(err, ("STRTOLL failed: %s\n", strerror(err)));
 	DTCHECK(rd != 12, ("rd (%ld) != 0\n", rd));
 
 	dtapi_deinit(dtapi_conf);

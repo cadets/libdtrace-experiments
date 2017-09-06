@@ -22,15 +22,15 @@ main(void)
 	dtapi_conf = dtapi_init(1000, 20, DTRACE_ACCESS_KERNEL);
 
 	rd = dtapi_lltostr(dtapi_conf, 4123, &err);
-	DTCHECK(err, ("LLTOSTR: failed: %s\n", strerror(err)));
+	DTCHECK(err, ("LLTOSTR failed: %s\n", strerror(err)));
 	DTCHECK(strcmp("4123", rd) != 0, ("rd (%s) != 4123\n", rd));
 
 	rd = dtapi_lltostr(dtapi_conf, -4131, &err);
-	DTCHECK(err, ("LLTOSTR: failed: %s\n", strerror(err)));
+	DTCHECK(err, ("LLTOSTR failed: %s\n", strerror(err)));
 	DTCHECK(strcmp("-4131", rd) != 0, ("rd (%s) != -4131\n", rd));
 
 	rd = dtapi_lltostr(dtapi_conf, 0, &err);
-	DTCHECK(err, ("LLTOSTR: failed: %s\n", strerror(err)));
+	DTCHECK(err, ("LLTOSTR failed: %s\n", strerror(err)));
 	DTCHECK(*rd != '0', ("rd (%s) != 0\n", rd));
 
 	dtapi_deinit(dtapi_conf);
