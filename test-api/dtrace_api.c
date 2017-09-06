@@ -996,7 +996,7 @@ dtapi_lltostr(dtapi_conf_t *conf, int64_t num, int *err)
 
 	estate->dtes_regs[3] = num;
 
-	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 2, 3);
+	instr = DIF_INSTR_PUSHTS(DIF_OP_PUSHTV, 0, 0, 3);
 	(void) dtrace_emul_instruction(instr, estate, mstate, vstate, state);
 
 	instr = DIF_INSTR_CALL(DIF_SUBR_LLTOSTR, 3);
