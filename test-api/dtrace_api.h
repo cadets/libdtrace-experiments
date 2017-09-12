@@ -74,6 +74,8 @@ uint64_t	dtapi_op_rldub(dtapi_conf_t *, uint8_t, int *);
 uint64_t	dtapi_op_rlduh(dtapi_conf_t *, uint16_t, int *);
 uint64_t	dtapi_op_rlduw(dtapi_conf_t *, uint32_t, int *);
 uint64_t	dtapi_op_rldx(dtapi_conf_t *, uint64_t, int *);
+uint64_t	dtapi_var_args(dtapi_conf_t *, uint64_t [5], uint64_t,
+        	    dtrace_id_t, int *);
 uint64_t	dtapi_op_setx(dtapi_conf_t *, uint64_t, int *);
 uint64_t	dtapi_op_sets(dtapi_conf_t *, uint64_t, int *);
 void		dtapi_op_pushtr(dtapi_conf_t *,
