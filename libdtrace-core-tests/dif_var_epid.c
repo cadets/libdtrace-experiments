@@ -25,8 +25,9 @@ main(void)
 
 	rd = dtapi_var_epid(dtapi_conf, &err);
 	DTCHECK(err, ("EPID failed: %s\n", strerror(err)));
-	DTCHECK(rd != 123, ("rd (%lu) != 1234\n", rd));
+	DTCHECK(rd != 123, ("rd (%lu) != 123\n", rd));
 
 	dtapi_deinit(dtapi_conf);
 	return (0);
 }
+

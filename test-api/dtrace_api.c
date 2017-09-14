@@ -611,6 +611,33 @@ dtapi_var_epid(dtapi_conf_t *conf, int *err)
 	return (dif_op_ldgs(conf, DIF_VAR_EPID, err));
 }
 
+void	
+dtapi_set_probe(dtapi_conf_t *conf, dtrace_id_t probeid)
+{
+
+	conf->mstate->dtms_probe = dtrace_getprobe(probeid);
+}
+
+uint64_t
+dtapi_var_id(dtapi_conf_t *conf, int *err)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dtrace_probe_t *probe;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	mstate->dtms_present |= DTRACE_MSTATE_PROBE;
+
+	return (dif_op_ldgs(conf, DIF_VAR_ID, err));
+}
+
 uint64_t
 dtapi_op_setx(dtapi_conf_t *conf, uint64_t index, int *err)
 {
