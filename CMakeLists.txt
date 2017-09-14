@@ -81,10 +81,11 @@ if(BUILD_TESTS STREQUAL "yes")
 				NAME_WE
 			)
 			add_test(
-				${compiler_test_name}
+				${ctf_test_name}
 				"${FILECHECK_TEST_DIR}/ctf/testfilecheck.sh"
 				"ctfdump"
-				"${FILECHECK_TEST_DIR}/ctf/${compiler_test}.fc"
+				"${TESTS}/ctf/${ctf_test}"
+				"${FILECHECK_TEST_DIR}/ctf/${ctf_test}.fc"
 			)
 		endforeach()
 	endif()
