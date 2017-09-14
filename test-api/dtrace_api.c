@@ -692,6 +692,14 @@ dtapi_var_execname(dtapi_conf_t *conf, int *err)
 	return ((char *)dif_op_ldgs(conf, DIF_VAR_EXECNAME, err));
 }
 
+uid_t
+dtapi_var_uid(dtapi_conf_t *conf, int *err)
+{
+
+	conf->state->dts_cred.dcr_action |= DTRACE_CRA_PROC;
+	return (dif_op_ldgs(conf, DIF_VAR_UID, err));
+}
+
 uint64_t
 dtapi_op_setx(dtapi_conf_t *conf, uint64_t index, int *err)
 {

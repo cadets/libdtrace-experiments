@@ -14,18 +14,17 @@ int
 main(void)
 {
 	/*
-	 * Test the execname variable.
+	 * Test the uid variable.
 	 */
 	dtapi_conf_t *dtapi_conf;
-	char *rd;
+	uid_t rd;
 	int err;
 
 	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
 
-	setprogname("Test Program");
-	rd = dtapi_var_execname(dtapi_conf, &err);
-	DTCHECK(err, ("EXECNAME failed: %s\n", strerror(err)));
-	DTCHECK(strcmp(rd, "Test Program"), ("rd (%s) != Test Program\n", rd));
+	rd = dtapi_var_uid(dtapi_conf, &err);
+	DTCHECK(err, ("UID failed: %s\n", strerror(err)));
+	DTCHECK(rd != getuid(), ("rd (%d) != %d\n", rd, getuid()));
 
 	dtapi_deinit(dtapi_conf);
 	return (0);
