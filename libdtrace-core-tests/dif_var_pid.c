@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "../libdtrace-core/dtrace.h"
 #include "../libdtrace-core/dtrace_impl.h"
@@ -13,11 +14,10 @@ int
 main(void)
 {
 	/*
-	 * Test the probefunc variable.
+	 * Test the pid variable.
 	 */
 	dtapi_conf_t *dtapi_conf;
-	char *rd;
-	dtrace_id_t probeid;
+	pid_t rd;
 	int err;
 
 	err = dtrace_init();
@@ -25,12 +25,10 @@ main(void)
 
 	dtapi_conf = dtapi_init(100, 20, DTRACE_ACCESS_KERNEL);
 
-	probeid = 3;
-	dtapi_set_probe(dtapi_conf, probeid);
 
-	rd = dtapi_var_probefunc(dtapi_conf, &err);
-	DTCHECK(err, ("PROBEFUNC failed: %s\n", strerror(err)));
-	DTCHECK(strcmp("", rd), ("rd (%s) != ""\n", rd));
+	rd = dtapi_var_pid(dtapi_conf, &err);
+	DTCHECK(err, ("PID failed: %s\n", strerror(err)));
+	DTCHECK(rd != getpid(), ("rd (%d) != %d\n", rd, getpid()));
 
 	dtapi_deinit(dtapi_conf);
 	err = dtrace_deinit();

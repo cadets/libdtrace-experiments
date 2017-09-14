@@ -30,7 +30,7 @@ main(void)
 
 	rd = dtapi_var_probename(dtapi_conf, &err);
 	DTCHECK(err, ("PROBENAME failed: %s\n", strerror(err)));
-	DTCHECK(strcmp("ERROR", rd), ("rd (%s) != dtrace\n", rd));
+	DTCHECK(strcmp("ERROR", rd), ("rd (%s) != ERROR\n", rd));
 
 	dtapi_deinit(dtapi_conf);
 	err = dtrace_deinit();

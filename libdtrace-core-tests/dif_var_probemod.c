@@ -30,7 +30,7 @@ main(void)
 
 	rd = dtapi_var_probemod(dtapi_conf, &err);
 	DTCHECK(err, ("PROBEMOD failed: %s\n", strerror(err)));
-	DTCHECK(strcmp("", rd), ("rd (%s) != dtrace\n", rd));
+	DTCHECK(strcmp("", rd), ("rd (%s) != ""\n", rd));
 
 	dtapi_deinit(dtapi_conf);
 	err = dtrace_deinit();
