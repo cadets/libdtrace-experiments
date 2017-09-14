@@ -539,6 +539,26 @@ dif_op_ldga(dtapi_conf_t *conf, uint64_t var,
 	return (estate->dtes_regs[3]);
 }
 
+static uint64_t
+dif_op_ldgs(dtapi_conf_t *conf, uint64_t var, int *err)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	instr = DIF_INSTR_LDV(DIF_OP_LDGS, var, 3);
+	*err = dtrace_emul_instruction(instr, estate, mstate, vstate, state);
+
+	return (estate->dtes_regs[3]);
+}
+
 uint64_t
 dtapi_var_args(dtapi_conf_t *conf, uint64_t arg[5], uint64_t idx,
     dtrace_id_t probeid, int *err)
@@ -562,6 +582,33 @@ dtapi_var_args(dtapi_conf_t *conf, uint64_t arg[5], uint64_t idx,
 	estate->dtes_regs[2] = idx;
 
 	return (dif_op_ldga(conf, DIF_VAR_ARGS, 2, err));
+}
+
+void	
+dtapi_var_set_epid(dtapi_conf_t *conf, uint64_t val)
+{
+
+	conf->mstate->dtms_epid = val;
+}
+
+uint64_t
+dtapi_var_epid(dtapi_conf_t *conf, int *err)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dtrace_probe_t *probe;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	mstate->dtms_present |= DTRACE_MSTATE_EPID;
+
+	return (dif_op_ldgs(conf, DIF_VAR_EPID, err));
 }
 
 uint64_t
