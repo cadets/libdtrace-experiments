@@ -69,23 +69,23 @@ if(BUILD_TESTS STREQUAL "yes")
 		file(
 			GLOB
 			CTF_TEST_SRCS
-			RELATIVE ${FILECHECK_TEST_DIR}/ctf
-			${FILECHECK_TEST_DIR}/ctf/*.o
+			RELATIVE ${TESTS}/ctf
+			${TESTS}/ctf/*.o
 		)
 
-	#	set(CTF_TESTS ${TESTS}/filecheck-tests/ctf)
-	#	foreach(ctf_test ${CTF_TESTS})
-	#		get_filename_component(
-	#			ctf_test_name
-	#			${FILECHECK_TEST_DIR}/ctf/${ctf_test}
-	#			NAME_WE
-	#		)
-	#		add_test(
-	#			${compiler_test_name}
-	#			"${FILECHECK_TEST_DIR}/ctf/testfilecheck.sh"
-	#			"dtrace -S -e -s"
-	#			"${FILECHECK_TEST_DIR}/ctf/${compiler_test}"
-	#		)
-	#	endforeach()
+		set(CTF_TESTS ${TESTS}/filecheck-tests/ctf)
+		foreach(ctf_test ${CTF_TESTS})
+			get_filename_component(
+				ctf_test_name
+				${FILECHECK_TEST_DIR}/ctf/${ctf_test}
+				NAME_WE
+			)
+			add_test(
+				${compiler_test_name}
+				"${FILECHECK_TEST_DIR}/ctf/testfilecheck.sh"
+				"ctfdump"
+				"${FILECHECK_TEST_DIR}/ctf/${compiler_test}.fc"
+			)
+		endforeach()
 	endif()
 endif()
