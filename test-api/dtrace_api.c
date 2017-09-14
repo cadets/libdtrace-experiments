@@ -670,6 +670,28 @@ dtapi_var_pid(dtapi_conf_t *conf, int *err)
 	return (dif_op_ldgs(conf, DIF_VAR_PID, err));
 }
 
+pid_t
+dtapi_var_ppid(dtapi_conf_t *conf, int *err)
+{
+
+	conf->state->dts_cred.dcr_action |= DTRACE_CRA_PROC;
+	return (dif_op_ldgs(conf, DIF_VAR_PPID, err));
+}
+
+uint64_t
+dtapi_var_tid(dtapi_conf_t *conf, int *err)
+{
+
+	return (dif_op_ldgs(conf, DIF_VAR_TID, err));
+}
+
+char *
+dtapi_var_execname(dtapi_conf_t *conf, int *err)
+{
+
+	return ((char *)dif_op_ldgs(conf, DIF_VAR_EXECNAME, err));
+}
+
 uint64_t
 dtapi_op_setx(dtapi_conf_t *conf, uint64_t index, int *err)
 {
