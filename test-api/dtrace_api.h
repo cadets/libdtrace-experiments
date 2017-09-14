@@ -80,6 +80,10 @@ void		dtapi_var_set_epid(dtapi_conf_t *, uint64_t);
 uint64_t	dtapi_var_epid(dtapi_conf_t *, int *);
 void		dtapi_set_probe(dtapi_conf_t *, dtrace_id_t);
 uint64_t	dtapi_var_id(dtapi_conf_t *, int *);
+char *		dtapi_var_probeprov(dtapi_conf_t *, int *);
+char *		dtapi_var_probemod(dtapi_conf_t *, int *);
+char *		dtapi_var_probefunc(dtapi_conf_t *, int *);
+char *		dtapi_var_probename(dtapi_conf_t *, int *);
 uint64_t	dtapi_op_setx(dtapi_conf_t *, uint64_t, int *);
 uint64_t	dtapi_op_sets(dtapi_conf_t *, uint64_t, int *);
 void		dtapi_op_pushtr(dtapi_conf_t *,

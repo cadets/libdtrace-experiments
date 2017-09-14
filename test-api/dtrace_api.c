@@ -638,6 +638,54 @@ dtapi_var_id(dtapi_conf_t *conf, int *err)
 	return (dif_op_ldgs(conf, DIF_VAR_ID, err));
 }
 
+static char *
+dtapi_var_probeX(dtapi_conf_t *conf, uint64_t var, int *err)
+{
+	dtrace_mstate_t *mstate;
+	dtrace_vstate_t *vstate;
+	dtrace_state_t *state;
+	dtrace_estate_t *estate;
+	dtrace_probe_t *probe;
+	dif_instr_t instr;
+
+	mstate = conf->mstate;
+	vstate = conf->vstate;
+	state = conf->state;
+	estate = conf->estate;
+
+	mstate->dtms_present |= DTRACE_MSTATE_PROBE;
+
+	return ((char *)dif_op_ldgs(conf, var, err));
+}
+
+char *
+dtapi_var_probeprov(dtapi_conf_t *conf, int *err)
+{
+
+	return (dtapi_var_probeX(conf, DIF_VAR_PROBEPROV, err));
+}
+
+char *
+dtapi_var_probemod(dtapi_conf_t *conf, int *err)
+{
+
+	return (dtapi_var_probeX(conf, DIF_VAR_PROBEMOD, err));
+}
+
+char *
+dtapi_var_probefunc(dtapi_conf_t *conf, int *err)
+{
+
+	return (dtapi_var_probeX(conf, DIF_VAR_PROBEFUNC, err));
+}
+
+char *
+dtapi_var_probename(dtapi_conf_t *conf, int *err)
+{
+
+	return (dtapi_var_probeX(conf, DIF_VAR_PROBENAME, err));
+}
+
 uint64_t
 dtapi_op_setx(dtapi_conf_t *conf, uint64_t index, int *err)
 {
