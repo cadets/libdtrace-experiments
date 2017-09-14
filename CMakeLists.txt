@@ -7,23 +7,6 @@ find_library(
 	PATHS ./
 )
 
-set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libdtrace-core-tests)
-set(FILECHECK_TEST_DIR ${TEST_DIR}/filecheck-tests)
-
-file(
-	GLOB
-	TEST_SRCS
-	RELATIVE ${TEST_DIR}
-	${TEST_DIR}/*.c
-)
-
-file(
-	GLOB
-	FILECHECK_TEST_SRCS
-	RELATIVE ${FILECHECK_TEST_DIR}
-	${FILECHECK_TEST_DIR}/*.d
-)
-
 if(BUILD_TESTS STREQUAL "yes")
 	add_definitions(-D_DTRACE_TESTS)
 endif()
@@ -31,6 +14,16 @@ endif()
 add_subdirectory(libdtrace-core)
 
 if(BUILD_TESTS STREQUAL "yes")
+	set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/libdtrace-core-tests)
+	set(FILECHECK_TEST_DIR ${TEST_DIR}/filecheck-tests)
+
+	file(
+		GLOB
+		TEST_SRCS
+		RELATIVE ${TEST_DIR}
+		${TEST_DIR}/*.c
+	)
+
 	add_subdirectory(libdtrace-core-tests)
 	add_subdirectory(libdtrace-core-fuzz)
 
@@ -51,19 +44,48 @@ if(BUILD_TESTS STREQUAL "yes")
 		message(WARNING "FileCheck not found, disabling FileCheck tests")
 		message(WARNING "Set FILECHECK to the path to FileCheck to enable them")
 	else()
-		set(FILECHECK_TESTS ${TESTS}/filecheck-tests)
-		foreach(filecheck_test ${FILECHECK_TEST_SRCS})
+		file(
+			GLOB
+			COMPILER_TEST_SRCS
+			RELATIVE ${FILECHECK_TEST_DIR}/compiler
+			${FILECHECK_TEST_DIR}/compiler/*.d
+		)
+
+		set(COMPILER_TESTS ${TESTS}/filecheck-tests/compiler)
+		foreach(compiler_test ${COMPILER_TEST_SRCS})
 			get_filename_component(
-				filecheck_test_name
-				${FILECHECK_TEST_DIR}/${filecheck_test}
+				compiler_test_name
+				${FILECHECK_TEST_DIR}/compiler/${compiler_test}
 				NAME_WE
 			)
 			add_test(
-				${filecheck_test_name}
-				"${FILECHECK_TEST_DIR}/testfilecheck.sh"
+				${compiler_test_name}
+				"${FILECHECK_TEST_DIR}/compiler/testfilecheck.sh"
 				"dtrace -S -e -s"
-				"${FILECHECK_TEST_DIR}/${filecheck_test}"
+				"${FILECHECK_TEST_DIR}/compiler/${compiler_test}"
 			)
 		endforeach()
+
+		file(
+			GLOB
+			CTF_TEST_SRCS
+			RELATIVE ${FILECHECK_TEST_DIR}/ctf
+			${FILECHECK_TEST_DIR}/ctf/*.o
+		)
+
+	#	set(CTF_TESTS ${TESTS}/filecheck-tests/ctf)
+	#	foreach(ctf_test ${CTF_TESTS})
+	#		get_filename_component(
+	#			ctf_test_name
+	#			${FILECHECK_TEST_DIR}/ctf/${ctf_test}
+	#			NAME_WE
+	#		)
+	#		add_test(
+	#			${compiler_test_name}
+	#			"${FILECHECK_TEST_DIR}/ctf/testfilecheck.sh"
+	#			"dtrace -S -e -s"
+	#			"${FILECHECK_TEST_DIR}/ctf/${compiler_test}"
+	#		)
+	#	endforeach()
 	endif()
 endif()
