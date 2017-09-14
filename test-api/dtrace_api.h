@@ -89,6 +89,9 @@ pid_t		dtapi_var_ppid(dtapi_conf_t *, int *);
 uint64_t	dtapi_var_tid(dtapi_conf_t *, int *);
 char *		dtapi_var_execname(dtapi_conf_t *, int *);
 uid_t		dtapi_var_uid(dtapi_conf_t *, int *);
+gid_t		dtapi_var_gid(dtapi_conf_t *, int *);
+errno_t		dtapi_var_errno(dtapi_conf_t *, int *);
+uint64_t	dtapi_var_arbitrary(dtapi_conf_t *, uint64_t, int *);
 uint64_t	dtapi_op_setx(dtapi_conf_t *, uint64_t, int *);
 uint64_t	dtapi_op_sets(dtapi_conf_t *, uint64_t, int *);
 void		dtapi_op_pushtr(dtapi_conf_t *,
