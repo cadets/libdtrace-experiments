@@ -24,42 +24,46 @@ file(
 	${FILECHECK_TEST_DIR}/*.d
 )
 
-add_definitions(-D_DTRACE_TESTS)
-
-add_subdirectory(libdtrace-core)
-add_subdirectory(libdtrace-core-tests)
-add_subdirectory(libdtrace-core-fuzz)
-
-enable_testing()
-set(TESTS libdtrace-core-tests)
-
-foreach(test_source ${TEST_SRCS})
-	get_filename_component(test_name ${test_source} NAME_WE)
-	add_test(${test_name} ${TESTS}/${test_name})
-endforeach(test_source)
-
-find_program(
-	FILECHECK
-	NAMES "FileCheck"
-)
-
-if(FILECHECK STREQUAL "FILECHECK-NOTFOUND")
-	message(WARNING "FileCheck not found, disabling FileCheck tests")
-	message(WARNING "Set FILECHECK to the path to FileCheck to enable them")
-else()
-	set(FILECHECK_TESTS ${TESTS}/filecheck-tests)
-	foreach(filecheck_test ${FILECHECK_TEST_SRCS})
-		get_filename_component(
-			filecheck_test_name
-			${FILECHECK_TEST_DIR}/${filecheck_test}
-			NAME_WE
-		)
-		add_test(
-			${filecheck_test_name}
-			"${FILECHECK_TEST_DIR}/testfilecheck.sh"
-			"dtrace -S -e -s"
-			"${FILECHECK_TEST_DIR}/${filecheck_test}"
-		)
-	endforeach()
+if(BUILD_TESTS STREQUAL "yes")
+	add_definitions(-D_DTRACE_TESTS)
 endif()
 
+add_subdirectory(libdtrace-core)
+
+if(BUILD_TESTS STREQUAL "yes")
+	add_subdirectory(libdtrace-core-tests)
+	add_subdirectory(libdtrace-core-fuzz)
+
+	enable_testing()
+	set(TESTS libdtrace-core-tests)
+
+	foreach(test_source ${TEST_SRCS})
+		get_filename_component(test_name ${test_source} NAME_WE)
+		add_test(${test_name} ${TESTS}/${test_name})
+	endforeach(test_source)
+
+	find_program(
+		FILECHECK
+		NAMES "FileCheck"
+	)
+
+	if(FILECHECK STREQUAL "FILECHECK-NOTFOUND")
+		message(WARNING "FileCheck not found, disabling FileCheck tests")
+		message(WARNING "Set FILECHECK to the path to FileCheck to enable them")
+	else()
+		set(FILECHECK_TESTS ${TESTS}/filecheck-tests)
+		foreach(filecheck_test ${FILECHECK_TEST_SRCS})
+			get_filename_component(
+				filecheck_test_name
+				${FILECHECK_TEST_DIR}/${filecheck_test}
+				NAME_WE
+			)
+			add_test(
+				${filecheck_test_name}
+				"${FILECHECK_TEST_DIR}/testfilecheck.sh"
+				"dtrace -S -e -s"
+				"${FILECHECK_TEST_DIR}/${filecheck_test}"
+			)
+		endforeach()
+	endif()
+endif()
