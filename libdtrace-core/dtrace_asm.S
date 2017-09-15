@@ -19,6 +19,7 @@
  * CDDL HEADER END
  *
  * Portions Copyright 2008 John Birrell <jb@freebsd.org>
+ * Portions Copyright 2017 Domagoj Stolfa
  *
  * $FreeBSD: head/sys/cddl/dev/dtrace/amd64/dtrace_asm.S 298171 2016-04-17 23:08:47Z markj $
  *
