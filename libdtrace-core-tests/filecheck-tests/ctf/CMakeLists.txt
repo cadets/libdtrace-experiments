@@ -12,7 +12,7 @@ foreach(ctf_src ${CTF_SRCS})
 	get_filename_component(ctf_name ${ctf_src} NAME_WE)
 	add_custom_command(
 		OUTPUT gen-${ctf_name}-obj
-		COMMAND ${CMAKE_C_COMPILER} ${CMAKE_C_FLAGS} -O2 -g -c -o ${ctf_name}.o ${CMAKE_CURRENT_SOURCE_DIR}/${ctf_src}
+		COMMAND ${CMAKE_C_COMPILER} ${CMAKE_C_FLAGS} -O0 -g -c -o ${ctf_name}.o ${CMAKE_CURRENT_SOURCE_DIR}/${ctf_src}
 	)
 	add_custom_command(
 		OUTPUT gen-${ctf_name}-ctf
