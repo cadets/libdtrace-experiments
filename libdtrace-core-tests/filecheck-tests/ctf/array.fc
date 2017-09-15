@@ -1,0 +1,44 @@
+CHECK: [1] INTEGER int encoding=SIGNED offset=0 bits=32
+CHECK-NEXT: [2] INTEGER long encoding=SIGNED offset=0 bits=64
+CHECK-NEXT: <3> ARRAY (anon) content: 1 index: 2 nelems: 3
+
+CHECK: [4] FLOAT double encoding=DOUBLE offset=0 bits=64
+CHECK-NEXT: <5> ARRAY (anon) content: 4 index: 2 nelems: 42
+
+CHECK: [6] INTEGER char encoding=SIGNED CHAR offset=0 bits=8
+CHECK-NEXT: [7] CONST (anon) refers to 6
+CHECK-NEXT: [8] POINTER (anon) refers to 7
+CHECK-NEXT: <9> ARRAY (anon) content: 8 index: 2 nelems: 2
+
+CHECK: [10] ARRAY (anon) content: 1 index: 2 nelems: 5
+CHECK: <11> ARRAY (anon) content: 10 index: 2 nelems: 4
+
+CHECK: [12] ARRAY (anon) content: 1 index: 2 nelems: 6
+CHECK: [13] ARRAY (anon) content: 12 index: 2 nelems: 5
+CHECK: <14> ARRAY (anon) content: 13 index: 2 nelems: 4
+
+CHECK: [15] ARRAY (anon) content: 1 index: 2 nelems: 7
+CHECK: [16] ARRAY (anon) content: 15 index: 2 nelems: 6
+CHECK: [17] ARRAY (anon) content: 16 index: 2 nelems: 5
+CHECK: <18> ARRAY (anon) content: 17 index: 2 nelems: 4
+
+CHECK: [19] ARRAY (anon) content: 1 index: 2 nelems: 8
+CHECK: [20] ARRAY (anon) content: 19 index: 2 nelems: 7
+CHECK: [21] ARRAY (anon) content: 20 index: 2 nelems: 6
+CHECK: [22] ARRAY (anon) content: 21 index: 2 nelems: 5
+CHECK: <23> ARRAY (anon) content: 22 index: 2 nelems: 4
+
+CHECK: [24] ARRAY (anon) content: 1 index: 2 nelems: 9
+CHECK: [25] ARRAY (anon) content: 24 index: 2 nelems: 8
+CHECK: [26] ARRAY (anon) content: 25 index: 2 nelems: 7
+CHECK: [27] ARRAY (anon) content: 26 index: 2 nelems: 6
+CHECK: [28] ARRAY (anon) content: 27 index: 2 nelems: 5
+CHECK: <29> ARRAY (anon) content: 28 index: 2 nelems: 4
+
+CHECK: [30] ARRAY (anon) content: 1 index: 2 nelems: 10
+CHECK: [31] ARRAY (anon) content: 30 index: 2 nelems: 9
+CHECK: [32] ARRAY (anon) content: 31 index: 2 nelems: 8
+CHECK: [33] ARRAY (anon) content: 32 index: 2 nelems: 7
+CHECK: [34] ARRAY (anon) content: 33 index: 2 nelems: 6
+CHECK: [35] ARRAY (anon) content: 34 index: 2 nelems: 5
+CHECK: <36> ARRAY (anon) content: 35 index: 2 nelems: 4
