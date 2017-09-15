@@ -1,1 +1,1 @@
-CHECK: stuff
+CHECK: <1> INTEGER int encoding=SIGNED offset=0 bits=32

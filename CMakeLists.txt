@@ -69,24 +69,24 @@ if(BUILD_TESTS STREQUAL "yes")
 		file(
 			GLOB
 			CTF_TEST_SRCS
-			RELATIVE ${TESTS}/ctf
-			${TESTS}/ctf/*.o
+			${TEST_DIR}/filecheck-tests/ctf/*.c
 		)
 
 		set(CTF_TESTS ${TESTS}/filecheck-tests/ctf)
-		foreach(ctf_test ${CTF_TESTS})
+		foreach(ctf_test ${CTF_TEST_SRCS})
 			get_filename_component(
 				ctf_test_name
-				${FILECHECK_TEST_DIR}/ctf/${ctf_test}
+				${ctf_test}
 				NAME_WE
 			)
 			add_test(
 				${ctf_test_name}
 				"${FILECHECK_TEST_DIR}/ctf/testfilecheck.sh"
 				"ctfdump"
-				"${TESTS}/ctf/${ctf_test}"
-				"${FILECHECK_TEST_DIR}/ctf/${ctf_test}.fc"
+				"${TESTS}/filecheck-tests/ctf/${ctf_test_name}.ctf"
+				"${FILECHECK_TEST_DIR}/ctf/${ctf_test_name}.fc"
 			)
+			set_tests_properties(${ctf_test_name} PROPERTIES DEPENDS gen-${ctf_test_name}-ctf)
 		endforeach()
 	endif()
 endif()
