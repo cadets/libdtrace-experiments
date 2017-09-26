@@ -35,3 +35,15 @@ struct first {
 } __attribute__((packed)); /* Expected 5 bytes */
 
 struct first first;
+
+struct second {
+	char one; /* 1 */
+	int two; /* 5 */
+	char three; /* 6 */
+	double four; /* 14 */
+	char five; /* 15 */
+	struct first six; /* 20 */
+	char seven; /* 21 */
+} __attribute__((packed)); /* Expected 21 bytes */
+
+struct second second;

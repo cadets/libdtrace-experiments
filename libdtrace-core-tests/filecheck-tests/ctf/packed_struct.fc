@@ -31,4 +31,7 @@
 
 CHECK: INTEGER char encoding=SIGNED CHAR offset=0 bits=8
 CHECK: INTEGER int encoding=SIGNED offset=0 bits=32
+CHECK: FLOAT double encoding=DOUBLE offset=0 bits=64
+
 CHECK: STRUCT first (5 bytes)
+CHECK: STRUCT second (21 bytes)
