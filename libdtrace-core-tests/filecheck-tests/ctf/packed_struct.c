@@ -34,8 +34,6 @@ struct first {
 	int two;
 } __attribute__((packed)); /* Expected 5 bytes */
 
-struct first first;
-
 struct second {
 	char one; /* 1 */
 	int two; /* 5 */
@@ -46,4 +44,22 @@ struct second {
 	char seven; /* 21 */
 } __attribute__((packed)); /* Expected 21 bytes */
 
+struct third {
+	char one:1; /* 1 */
+	int two; /* 5 */
+	char three:2; /* 6 */
+	double four; /* 14 */
+} __attribute__((packed)); /* Expected 14 bytes */
+
+struct fourth {
+	char one:1; /* 1 */
+	int two; /* 5 */
+	char three:2; /* Should be together with the next */
+	char four:6; /* 6 */
+	double five; /* 14 */
+} __attribute__((packed)); /* Expected 14 bytes */
+
+struct first first;
 struct second second;
+struct third third;
+struct fourth fourth;

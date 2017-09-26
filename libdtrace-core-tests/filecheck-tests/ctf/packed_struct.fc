@@ -29,9 +29,16 @@
 * SUCH DAMAGE.
 */
 
-CHECK: INTEGER char encoding=SIGNED CHAR offset=0 bits=8
+CHECK: INTEGER char encoding=SIGNED CHAR offset=0 bits=1
 CHECK: INTEGER int encoding=SIGNED offset=0 bits=32
+CHECK: INTEGER char encoding=SIGNED CHAR offset=0 bits=2
+CHECK: INTEGER char encoding=SIGNED CHAR offset=0 bits=6
 CHECK: FLOAT double encoding=DOUBLE offset=0 bits=64
+
+CHECK: STRUCT fourth (14 bytes)
+
+CHECK: INTEGER char encoding=SIGNED CHAR offset=0 bits=8
 
 CHECK: STRUCT first (5 bytes)
 CHECK: STRUCT second (21 bytes)
+CHECK: STRUCT third (14 bytes)
