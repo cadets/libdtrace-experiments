@@ -42,3 +42,11 @@ struct second {
 	int three;
 	int four;
 } second; /* Expect 16 bytes */
+
+struct third {
+	int one;
+	int two;
+	int three;
+	int four;
+	char five:1;
+} third; /* Expect 20 bytes */
