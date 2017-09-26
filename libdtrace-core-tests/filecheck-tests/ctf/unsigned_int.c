@@ -29,5 +29,5 @@
 * SUCH DAMAGE.
 */
 
-int x;
+unsigned int x;
 

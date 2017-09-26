@@ -29,5 +29,5 @@
 * SUCH DAMAGE.
 */
 
-int x;
+CHECK: <1> INTEGER unsigned int encoding=0x0 offset=0 bits=32
 
