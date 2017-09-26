@@ -29,15 +29,5 @@
 * SUCH DAMAGE.
 */
 
-encoding = 0x0 -- This makes absolutely no sense and should be printed
-correctly.
+unsigned char x;
 
-CHECK: [1] INTEGER unsigned long long encoding=0x0 offset=0 bits=64
-CHECK: [2] INTEGER int encoding=SIGNED offset=0 bits=32
-CHECK: [3] INTEGER long encoding=SIGNED offset=0 bits=64
-CHECK: [4] ARRAY (anon) content: 2 index: 3 nelems: 2
-CHECK: [5] INTEGER char encoding=SIGNED CHAR offset=0 bits=8
-CHECK: [6] ARRAY (anon) content: 5 index: 3 nelems: 0
-CHECK: <7> STRUCT second (16 bytes)
-CHECK: <8> STRUCT first (8 bytes)
-CHECK: <9> ARRAY (anon) content: 8 index: 3 nelems: 10
