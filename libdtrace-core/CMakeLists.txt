@@ -27,10 +27,15 @@
 # OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 # SUCH DAMAGE.
 
+project(libdtrace-core C ASM)
 cmake_minimum_required(VERSION 3.4)
 
+set_source_files_properties(dtrace_asm.S PROPERTIES COMPILE_FLAGS "-x assembler-with-cpp")
+
 add_library(
-	libdtrace-core
+	dtrace-core
 	SHARED
 	dtrace-core.c
+	dtrace_asm.S
+	unr.c
 )

@@ -12,3 +12,5 @@ libdtrace-core-tests/libdtrace-core-tests
 test-output
 test-output.xml
 *.ctfdump
+*.dif
+*.swp

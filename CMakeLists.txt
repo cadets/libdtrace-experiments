@@ -33,7 +33,7 @@ project(libdtrace-core)
 find_library(
 	dtrace-core
 	NAMES libdtrace-core
-	PATHS ./
+	PATHS ${CMAKE_BINARY_DIR}/libdtrace-core
 )
 
 if(BUILD_TESTS STREQUAL "yes")
