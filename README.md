@@ -1,24 +1,16 @@
 ### BUILD ###
 
-There are two build modes for libdtrace-core and it's components. The first mode
-is designed to be used by programs that have been built with the library and
-intend to use it in a real environment. This can be accomplished by building
-libdtrace-core without any flags as such:
+There are two types of builds for libdtrace-core. One is meant to be built with
+tests, while the other is aimed for future extensions to libdtrace-core that
+allow it to be linked into different processes in order to perform various types
+of tracing.
+
+The current recommended way to build the project is with the tests:
 
 ```
-make
-```
-
-The other way to build libdtrace-core is for testing purposes. This is not
-recommeded for a production environment due to the amount of symbols it exposes
-and thus introduced LD_PRELOAD type vulnerabilities and additional overhead.
-
-However, for testing purposes, in order to get access to a couple of the
-internal functions that aid in unit testing and fuzzing libdtrace-core, one can
-use:
-
-```
-make -D_DTRACE_TESTS
+mkdir build && cd build
+cmake -D BUILD_TESTS=yes .. -GNinja
+ninja
 ```
 
 ### FUZZ ###
@@ -54,50 +46,23 @@ The directory structure of the fuzzers from the perspective of the
 └── Makefile
 ```
 
-In fuzzing mode, each of the tools is built using afl-clang in order to get
-the necessary instrumentation in the binaries so that fuzzing can be more
+In fuzzing mode, each of the tools has to be built using afl-clang in order to
+get the necessary instrumentation in the binaries so that fuzzing can be more
 effective.
 
-In order to start the fuzz, fire up `tmux` and run:
-```
-./dtfuzz
-```
-
-`tmux` will not be a dependency in the future, but is here for convenience
-purposes for the moment.
-
-In addition to that, all of the regular AFL operations are supported, including
-parallel fuzzing and distributed fuzzing, but there is no "easy" way to run that
-currently and has to be done manually.
+The fuzzers should be run manually using AFL.
 
 ### TEST ###
 
-In order to run tests, the kyua package has to be installed, which can be done
-on FreeBSD using:
+The tests can be run using
 
 ```
-pkg install devel/kyua
+ninja test
 ```
 
-Following that, running tests can be done with the use of
+in the build directory.
 
-```
-make test
-```
+If FileCheck is installed, the compiler tests will also be set up and run.
+Similarly, if ctfconvert and ctfdump are present on the system, the CTF tests
+will be built and run automatically with the use of the above command.
 
-The reports can then be generated in two formats, the standard kyua report, as
-well as JUnit using the `report` and `junit` targets:
-
-```
-make report
-make junit
-```
-
-Should the tests fail, it's possible to gather the information on a test case
-through the use of
-
-```
-make debugtest TEST=<specification>
-```
-
-This requires for the gdb package to be installed.
